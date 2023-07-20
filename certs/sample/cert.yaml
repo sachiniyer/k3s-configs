@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: secure-sachiniyer-cert
+  namespace: secure-sachiniyer
+spec:
+  commonName: secure.sachiniyer.com
+  secretName: secure-sachiniyer-cert
+  dnsNames:
+    - secure.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-stage
+    kind: ClusterIssuer

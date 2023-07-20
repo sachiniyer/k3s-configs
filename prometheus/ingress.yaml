@@ -1,0 +1,45 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: prometheus-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: prometheus-auth-middleware@kubernetescrd
+spec:
+  tls:
+  - secretName: prometheus-cert
+  rules:
+  - host: metrics.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: prometheus-server
+             port:
+               number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: prometheus-cert
+  namespace: prometheus
+spec:
+  commonName: metrics.sachiniyer.com
+  secretName: prometheus-cert
+  dnsNames:
+    - metrics.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: auth-middleware
+  namespace: prometheus
+spec:
+  basicAuth:
+    removeHeader: true
+    secret: auth

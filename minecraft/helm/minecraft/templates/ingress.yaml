@@ -1,0 +1,12 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: tcp-ingress
+spec:
+  entryPoints:
+    - "tcpep"
+  routes:
+    - match: HostSNI(`*`) # Replace with your desired hostname or match condition
+      services:
+        - name: nginx-service
+          port: 80

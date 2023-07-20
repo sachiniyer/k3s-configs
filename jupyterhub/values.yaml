@@ -1,0 +1,32 @@
+hub:
+  config:
+    Authenticator:
+      admin_users:
+        - sachin
+    DummyAuthenticator:
+      password:
+    JupyterHub:
+      authenticator_class: dummy
+  db:
+    pvc:
+      annotations: {}
+      selector: {}
+      accessModes:
+        - ReadWriteOnce
+      storage: 20Gi
+      subPath:
+      storageClassName: rook-ceph-block
+singleuser:
+  allowPrivilegeEscalation: true
+  image:
+    name: jupyter/all-spark-notebook
+    tag: "latest"
+  storage:
+    dynamic:
+      storageClass: rook-ceph-block
+    capacity: 70Gi
+  uid: 0
+  extraEnv:
+    GRANT_SUDO: "yes"
+    NOTEBOOK_ARGS: "--allow-root"
+  cmd: "start-singleuser.sh"

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: health-nginx
+  name: health-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: health-nginx
+  template:
+    metadata:
+      labels:
+        run: health-nginx
+        app: health-nginx
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: "arm64"
+      containers:
+      - image: nginx
+        name: health-nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /usr/share/nginx/html
+          name: sachiniyer-volume
+      volumes:
+      - name: sachiniyer-volume
+        configMap:
+          name: nginx-index-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: health-nginx
+  name: health-nginx
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: health-nginx
+---
+apiVersion: v1
+data:
+  index.html: |-
+    <!doctype html>
+    <html>
+      <head>
+        <title>Secure stuff works</title>
+      </head>
+      <body>
+        <p>checking changes again</p>
+      </body>
+    </html>
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: nginx-index-html
+---

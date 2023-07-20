@@ -1,0 +1,54 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: status-cert
+  namespace: status
+spec:
+  commonName: status.sachiniyer.com
+  secretName: status-cert
+  dnsNames:
+    - status.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: status-middleware
+  namespace: status
+spec:
+  headers:
+    accessControlAllowMethods:
+      - GET
+      - POST
+      - PUT
+    accessControlAllowOriginList:
+      - https://sachiniyer.com
+      - http://127.0.0.1:8080
+    accessControlAllowCredentials: true
+    accessControlMaxAge: 100
+    addVaryHeader: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: status-ingress
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.middlewares: status-status-middleware@kubernetescrd
+spec:
+  tls:
+  - secretName: status-cert
+  rules:
+  - host: status.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: status
+             port:
+               number: 80

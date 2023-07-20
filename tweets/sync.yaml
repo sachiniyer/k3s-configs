@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tweets-website
+  labels:
+    k8s-app: tweets-website
+data:
+  nginx-docs.conf: |
+    server {
+        listen       80;
+        server_name  localhost;
+
+        location / {
+            root   /usr/share/nginx/html/nginx;
+            index  index.html index.htm;
+        }
+
+        error_page  404              /404.html;
+
+        # redirect server error pages to the static page /50x.html
+        #
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html/nginx;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tweets-deployment
+  labels:
+    app: tweets
+spec:
+  selector:
+    matchLabels:
+      app: tweets
+  template:
+    metadata:
+      labels:
+        app: tweets
+    spec:
+      containers:
+        - name: git-sync
+          image: openweb/git-sync
+          volumeMounts:
+            - name: nginx
+              mountPath: /git
+          env:
+            - name: GIT_SYNC_REPO
+              value: "http://git.sachiniyer.com/siyer/toxictweets.git"
+            - name: GIT_SYNC_BRANCH
+              value: "main"
+            - name: GIT_SYNC_DEST
+              value: "/git/nginx"
+            - name: GIT_SYNC_MAX_FAILURES
+              value: "-1"
+            - name: GIT_SYNC_WAIT
+              value: "10"
+        - name: tweets-nginx
+          image: nginx
+          ports:
+            - name: web
+              containerPort: 80
+          volumeMounts:
+            - name: nginx
+              mountPath: "/usr/share/nginx/html"
+            - name: conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx-docs.conf
+      volumes:
+        - name: nginx
+          emptyDir: {}
+        - name: conf
+          configMap:
+            name: tweets-website
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tweets-service
+  labels:
+    run: nginx
+spec:
+  ports:
+    - name: web
+      port: 80
+      protocol: TCP
+  selector:
+    app: tweets
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tweets-cert
+  namespace: tweets
+spec:
+  commonName: tweets.sachiniyer.com
+  secretName: tweets-cert
+  dnsNames:
+    - tweets.sachiniyer.com
+    - ai.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: tweets
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: changesite
+spec:
+  redirectRegex:
+    regex: "^https?://ai\\.sachiniyer\\.com(/.*)?"
+    replacement: "https://tweets.sachiniyer.com$1"
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: tweets-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: tweets-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: tweets-changesite@kubernetescrd
+spec:
+  tls:
+  - secretName: tweets-cert
+  rules:
+  - host: ai.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: tweets-service
+             port:
+               number: 80
+  - host: tweets.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: tweets-service
+             port:
+               number: 80

@@ -1,0 +1,45 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: nextcloud-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: nextcloud-redirect@kubernetescrd
+spec:
+  tls:
+  - secretName: nextcloud-cert
+  rules:
+  - host: store.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: nextcloud
+             port:
+               number: 8080
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nextcloud-cert
+  namespace: nextcloud
+spec:
+  commonName: store.sachiniyer.com
+  secretName: nextcloud-cert
+  dnsNames:
+    - store.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: nextcloud
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

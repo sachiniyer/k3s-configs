@@ -1,0 +1,21 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    image:
+      name: traefik
+    deployment:
+      kind: DaemonSet
+    additionalArguments:
+      - "--log.level=DEBUG"
+      - "--ping"
+      - "--metrics.prometheus"
+      - "--entryPoints.websecure.proxyProtocol.trustedIPs=10.64.0.2"
+      - "--entryPoints.web.forwardedHeaders.trustedIPs=10.64.0.2"
+      - "--entryPoints.websecure.forwardedHeaders.trustedIPs=10.64.0.2"
+    service:
+      annotations:
+        service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "true"

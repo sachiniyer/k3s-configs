@@ -1,0 +1,33 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: jupyterhub-ingress
+spec:
+  tls:
+  - secretName: jupyterhub-cert
+  rules:
+  - host: hub.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: proxy-public
+             port:
+               number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: jupyterhub-cert
+  namespace: jupyterhub
+spec:
+  commonName: hub.sachiniyer.com
+  secretName: jupyterhub-cert
+  dnsNames:
+    - hub.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer

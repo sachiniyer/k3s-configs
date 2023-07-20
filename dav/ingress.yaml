@@ -1,0 +1,45 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: dav-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: dav-redirect@kubernetescrd
+spec:
+  tls:
+  - secretName: dav-cert
+  rules:
+  - host: dav.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: baikal
+             port:
+               number: 10293
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dav-cert
+  namespace: dav
+spec:
+  commonName: dav.sachiniyer.com
+  secretName: dav-cert
+  dnsNames:
+    - dav.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: dav
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

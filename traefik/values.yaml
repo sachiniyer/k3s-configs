@@ -1,0 +1,36 @@
+USER-SUPPLIED VALUES:
+additionalArguments:
+- --log.level=DEBUG
+- --ping
+- --metrics.prometheus
+- --entryPoints.websecure.proxyProtocol.trustedIPs=10.64.0.2
+- --entryPoints.web.forwardedHeaders.trustedIPs=10.64.0.2
+- --entryPoints.websecure.forwardedHeaders.trustedIPs=10.64.0.2
+deployment:
+  kind: DaemonSet
+global:
+  systemDefaultRegistry: ""
+image:
+  name: traefik
+  tag: 2.9.4
+podAnnotations:
+  prometheus.io/port: "8082"
+  prometheus.io/scrape: "true"
+priorityClassName: system-cluster-critical
+providers:
+  kubernetesIngress:
+    publishedService:
+      enabled: true
+service:
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "true"
+  ipFamilyPolicy: PreferDualStack
+tolerations:
+- key: CriticalAddonsOnly
+  operator: Exists
+- effect: NoSchedule
+  key: node-role.kubernetes.io/control-plane
+  operator: Exists
+- effect: NoSchedule
+  key: node-role.kubernetes.io/master
+  operator: Exists

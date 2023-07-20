@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: test-nginx
+  name: test-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: test-nginx
+  template:
+    metadata:
+      labels:
+        run: test-nginx
+        app: test-nginx
+    spec:
+      containers:
+      - image: nginx
+        name: test-nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /usr/share/nginx/html
+          name: test-volume
+      volumes:
+      - name: test-volume
+        configMap:
+          name: nginx-index-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: test-nginx
+  name: test-nginx
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: test-nginx
+---
+apiVersion: v1
+data:
+  index.html: |-
+    <!doctype html>
+    <html>
+      <head>
+        <title>Welcome to your secure web page using Nginx</title>
+      </head>
+      <body>
+        <p>This will be a secure web page at the end of the tutorial!</p>
+      </body>
+    </html>
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: nginx-index-html

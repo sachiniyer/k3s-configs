@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-deployment
+  namespace: status
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: status
+  template:
+    metadata:
+      labels:
+        app: status
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: status
+          image: sachiyer/status:latest
+          imagePullPolicy: Always
+          env:
+            - name: NGINX
+              value: "https://raw.githubusercontent.com/sachiniyer/cheap_portable_k3s/main/nginx.conf"
+          ports:
+            - containerPort: 3000
