@@ -1,0 +1,42 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      run: nginx
+    name: mysite-service
+    namespace: website
+  spec:
+    ports:
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: sync
+      port: 90
+      protocol: TCP
+      targetPort: 90
+    selector:
+      app: mysite
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      run: nginx
+    name: resume-service
+    namespace: website
+  spec:
+    ports:
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    selector:
+      app: resume
+    sessionAffinity: None
+    type: ClusterIP
