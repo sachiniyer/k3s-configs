@@ -9,12 +9,19 @@ spec:
   - host: sachiniyer.com
     http:
       paths:
-      - backend:
+      - path: /sync
+        pathType: Prefix
+        backend:
+          service:
+            name: mysite-service
+            port:
+              number: 90
+      - path: /
+        pathType: Prefix
+        backend:
           service:
             name: mysite-service
             port:
               number: 80
-        path: /
-        pathType: Prefix
   tls:
   - secretName: website-cert
