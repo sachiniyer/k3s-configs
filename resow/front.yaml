@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resow-front
+spec:
+  selector:
+    matchLabels:
+      app: resow-front
+  template:
+    metadata:
+      labels:
+        app: resow-front
+    spec:
+      containers:
+        - name: resow-front
+          image: sachiyer/resow-front
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_SERVER_HOSTNAME
+              value: https://resow-api.sachiniyer.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resow-front
+spec:
+  selector:
+    app: resow-front
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: resow-front-cert
+  namespace: resow
+spec:
+  commonName: resow.sachiniyer.com
+  secretName: resow-front-cert
+  dnsNames:
+    - resow.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: resow
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: resow-front-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: resow-redirect@kubernetescrd
+spec:
+  tls:
+  - secretName: resow-front-cert
+  rules:
+  - host: resow.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: resow-front
+             port:
+               number: 80

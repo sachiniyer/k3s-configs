@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resow-back
+spec:
+  selector:
+    matchLabels:
+      app: resow-back
+  template:
+    metadata:
+      labels:
+        app: resow-back
+    spec:
+      containers:
+        - name: resow-back
+          image: sachiyer/resow-back
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DB_USER
+              value:
+            - name: DB_PWORD
+              value:
+            - name: DB_HOST
+              value:
+            - name: DB_PORT
+              value:
+            - name: DB_NAME
+              value:
+            - name: AWS_REGION
+              value:
+            - name: AWS_BUCKET_NAME
+              value:
+            - name: AWS_ACCESS_KEY
+              value:
+            - name: AWS_SECRET_ACCESS_KEY
+              value:
+            - name: JWT_SECRET
+              value:
+            - name: PORT
+              value:
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resow-back
+spec:
+  selector:
+    app: resow-back
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: resow-back-cert
+  namespace: resow
+spec:
+  commonName: resow-api.sachiniyer.com
+  secretName: resow-back-cert
+  dnsNames:
+    - resow-api.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: resow-back-ingress
+spec:
+  tls:
+  - secretName: resow-back-cert
+  rules:
+  - host: resow-api.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: resow-back
+             port:
+               number: 80

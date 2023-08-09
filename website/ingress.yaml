@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: mysite-ingress
   namespace: website
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: website-redirect@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
