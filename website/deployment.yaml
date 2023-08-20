@@ -21,7 +21,6 @@ spec:
         app: mysite
     spec:
       containers:
-
       - env:
         - name: GITSYNC_REPO
           value: "https://github.com/sachiniyer/website.git"
