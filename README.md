@@ -7,7 +7,7 @@ All passwords should be in a gpg encrypted file called pass (I am including it c
 Things are haphazard, sorry. If you want to know more about the cluster I have a [separate repo](https://github.com/sachiniyer/cheap_portable_k3s)
 
 # In Progress
-## [ ] Put everything in repo
+## Put everything in repo
 - [X] Test
 - [ ] school-demo
 - [ ] rook-ceph
@@ -32,12 +32,12 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [ ] forgejo
 - [X] debian
 - [X] resow
-## [ ] Migrate everything over to git-sync-webhooks
+## Migrate everything over to git-sync-webhooks
 - [X] website
 - [X] resume
 - [ ] tweets
 - [ ] emptypad
 - [ ] school-demo
 - [ ] blog
-## [ ] get dns working
+## get dns working
 - [ ] deploy either coredns + dns forworder or dnscrypt
