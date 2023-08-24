@@ -1,0 +1,53 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: emptypad-cert
+  namespace: emptypad
+spec:
+  commonName: emptypad.sachiniyer.com
+  secretName: emptypad-cert
+  dnsNames:
+    - emptypad.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: emptypad
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: emptypad-ingress
+  namespace: emptypad
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: emptypad-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emptypad.sachiniyer.com
+    http:
+      paths:
+      - path: /sync
+        pathType: Prefix
+        backend:
+          service:
+            name: emptypad-service
+            port:
+              number: 90
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: emptypad-service
+            port:
+              number: 80
+  tls:
+  - secretName: emptypad-cert

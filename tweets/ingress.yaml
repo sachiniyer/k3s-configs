@@ -1,0 +1,81 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tweets-cert
+  namespace: tweets
+spec:
+  commonName: tweets.sachiniyer.com
+  secretName: tweets-cert
+  dnsNames:
+    - tweets.sachiniyer.com
+    - ai.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: tweets
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: changesite
+spec:
+  redirectRegex:
+    regex: "^https?://ai\\.sachiniyer\\.com(/.*)?"
+    replacement: "https://tweets.sachiniyer.com$1"
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: tweets-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: tweets-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: tweets-changesite@kubernetescrd
+spec:
+  tls:
+  - secretName: tweets-cert
+  rules:
+  - host: ai.sachiniyer.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tweets-service
+            port:
+              number: 80
+      - path: /sync
+        pathType: Prefix
+        backend:
+          service:
+            name: tweets-service
+            port:
+              number: 90
+  - host: tweets.sachiniyer.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tweets-service
+            port:
+              number: 80
+      - path: /sync
+        pathType: Prefix
+        backend:
+          service:
+            name: tweets-service
+            port:
+              number: 90

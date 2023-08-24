@@ -1,0 +1,33 @@
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: forgejo-http-ingress
+spec:
+  tls:
+  - secretName: forgejo-cert
+  rules:
+  - host: git.sachiniyer.com
+    http:
+      paths:
+       - path: /
+         pathType: Prefix
+         backend:
+           service:
+             name: forgejo-http
+             port:
+               number: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: forgejo-cert
+  namespace: forgejo
+spec:
+  commonName: git.sachiniyer.com
+  secretName: forgejo-cert
+  dnsNames:
+    - git.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer

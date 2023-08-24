@@ -9,7 +9,7 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 # In Progress
 ## Put everything in repo
 - [X] Test
-- [ ] school-demo
+- [X] school-demo
 - [ ] rook-ceph
 - [X] nextcloud
 - [X] website
@@ -27,17 +27,16 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [X] kutt
 - [ ] ovpn
 - [X] status
-- [ ] matomo
+- [X] matomo
 - [X] tweets
-- [ ] forgejo
+- [X] forgejo
 - [X] debian
 - [X] resow
 ## Migrate everything over to git-sync-webhooks
 - [X] website
 - [X] resume
-- [ ] tweets
-- [ ] emptypad
-- [ ] school-demo
+- [X] tweets
+- [X] emptypad
 - [ ] blog
 ## get dns working
 - [ ] deploy either coredns + dns forworder or dnscrypt
