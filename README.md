@@ -20,7 +20,7 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [X] metallb
 - [X] prometheus
 - [ ] ctf
-- [ ] blog
+- [X] blog
 - [X] privatebin
 - [X] minecraft
 - [X] nfty
@@ -37,6 +37,6 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [X] resume
 - [X] tweets
 - [X] emptypad
-- [ ] blog
+- [X] blog
 ## get dns working
 - [ ] deploy either coredns + dns forworder or dnscrypt

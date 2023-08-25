@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: hugo
+  name: hugo-service
+  namespace: blog
+spec:
+  ports:
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: sync
+      port: 90
+      protocol: TCP
+      targetPort: 90
+  selector:
+    app: hugo
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
