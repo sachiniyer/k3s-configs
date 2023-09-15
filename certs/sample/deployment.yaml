@@ -16,17 +16,17 @@ spec:
         app: test-nginx
     spec:
       containers:
-      - image: nginx
-        name: test-nginx
-        ports:
-        - containerPort: 80
-        volumeMounts:
-        - mountPath: /usr/share/nginx/html
-          name: test-volume
+        - image: nginx
+          name: test-nginx
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - mountPath: /usr/share/nginx/html
+              name: test-volume
       volumes:
-      - name: test-volume
-        configMap:
-          name: nginx-index-html
+        - name: test-volume
+          configMap:
+            name: nginx-index-html
 ---
 apiVersion: v1
 kind: Service

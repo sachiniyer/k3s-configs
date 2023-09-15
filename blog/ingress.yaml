@@ -31,22 +31,22 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: blog-redirect@kubernetescrd
 spec:
   tls:
-  - secretName: blog-cert
+    - secretName: blog-cert
   rules:
-  - host: blog.sachiniyer.com
-    http:
-      paths:
-      - path: /sync
-        pathType: Prefix
-        backend:
-          service:
-            name: hugo-service
-            port:
-              number: 90
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: hugo-service
-            port:
-              number: 80
+    - host: blog.sachiniyer.com
+      http:
+        paths:
+          - path: /sync
+            pathType: Prefix
+            backend:
+              service:
+                name: hugo-service
+                port:
+                  number: 90
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hugo-service
+                port:
+                  number: 80

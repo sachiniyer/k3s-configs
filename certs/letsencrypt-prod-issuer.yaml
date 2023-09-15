@@ -14,8 +14,8 @@ spec:
       name: letsencrypt-prod
     # Enable the HTTP-01 challenge provider
     solvers:
-    # An empty 'selector' means that this solver matches all domains
-    - http01:
-        ingress:
-          class: traefik
-      selector: {}
+      # An empty 'selector' means that this solver matches all domains
+      - http01:
+          ingress:
+            class: traefik
+        selector: {}

@@ -15,56 +15,56 @@ spec:
         app: hugo
     spec:
       containers:
-      - env:
-        - name: GITSYNC_REPO
-          value: "http://github.com/sachiniyer/blog.git"
-        - name: GITSYNC_BRANCH
-          value: main
-        - name: GITSYNC_ROOT
-          value: "/data/hugo"
-        - name: GITSYNC_WAIT
-          value: "100"
-        - name: GITSYNC_HTTP_BIND
-          value: "0.0.0.0:90"
-        - name: GITSYNC_WEBHOOK_SYNC
-          value: "1"
-        - name: GIT_SYNC_MAX_FAILURES
-          value: "-1"
-        - name: GIT_SYNC_DEPTH
-          value: "1"
-        - name: GIT_SYNC_SUBMODULES
-          value: "recursive"
-        image: sachiyer/git-sync
-        imagePullPolicy: Always
-        name: git-sync
-        ports:
-        - containerPort: 90
-          name: sync
-          protocol: TCP
-        volumeMounts:
-        - mountPath: "/data"
-          name: data
-      - name: hugo
-        env:
-          - name: HUGO_VERSION
-            value: "0.117.0"
-          - name: BASE_URL
-            value: "https://blog.sachiniyer.com"
-          - name: ENVIRONMENT
-            value: "live"
-          - name: PORT
-            value: "80"
-          - name: DIR
-            value: "/data/hugo/blog.git"
-        image: sachiyer/hugo-server:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 80
-          name: web
-          protocol: TCP
-        volumeMounts:
-        - mountPath: /data
-          name: data
+        - env:
+            - name: GITSYNC_REPO
+              value: "http://github.com/sachiniyer/blog.git"
+            - name: GITSYNC_BRANCH
+              value: main
+            - name: GITSYNC_ROOT
+              value: "/data/hugo"
+            - name: GITSYNC_WAIT
+              value: "100"
+            - name: GITSYNC_HTTP_BIND
+              value: "0.0.0.0:90"
+            - name: GITSYNC_WEBHOOK_SYNC
+              value: "1"
+            - name: GIT_SYNC_MAX_FAILURES
+              value: "-1"
+            - name: GIT_SYNC_DEPTH
+              value: "1"
+            - name: GIT_SYNC_SUBMODULES
+              value: "recursive"
+          image: sachiyer/git-sync:latest
+          imagePullPolicy: Always
+          name: git-sync
+          ports:
+            - containerPort: 90
+              name: sync
+              protocol: TCP
+          volumeMounts:
+            - mountPath: "/data"
+              name: data
+        - name: hugo
+          env:
+            - name: HUGO_VERSION
+              value: "0.117.0"
+            - name: BASE_URL
+              value: "https://blog.sachiniyer.com"
+            - name: ENVIRONMENT
+              value: "live"
+            - name: PORT
+              value: "80"
+            - name: DIR
+              value: "/data/hugo/blog.git"
+          image: sachiyer/hugo-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: web
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /data
+              name: data
       volumes:
-      - emptyDir: {}
-        name: data
+        - emptyDir: {}
+          name: data

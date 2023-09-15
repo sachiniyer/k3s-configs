@@ -5,18 +5,18 @@ metadata:
   name: bitwarden-ingress
 spec:
   tls:
-  - secretName: bitwarden-cert
+    - secretName: bitwarden-cert
   rules:
-  - host: pass.sachiniyer.com
-    http:
-      paths:
-       - path: /
-         pathType: Prefix
-         backend:
-           service:
-             name: bitwarden-bitwarden-k8s
-             port:
-               number: 80
+    - host: pass.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bitwarden-bitwarden-k8s
+                port:
+                  number: 80
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
