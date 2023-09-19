@@ -1,3 +1,4 @@
+# assign user pods to node with the name milstead
 hub:
   config:
     Authenticator:
@@ -16,6 +17,10 @@ hub:
       storage: 20Gi
       subPath:
       storageClassName: rook-ceph-block
+scheduling:
+  userPods:
+    nodeAffinity:
+      matchNodePurpose: require
 singleuser:
   allowPrivilegeEscalation: true
   image:
