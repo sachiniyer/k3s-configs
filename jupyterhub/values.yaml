@@ -24,7 +24,7 @@ scheduling:
 singleuser:
   allowPrivilegeEscalation: true
   image:
-    name: jupyter/all-spark-notebook
+    name: sachiyer/jupyterhub
     tag: "latest"
   storage:
     dynamic:
