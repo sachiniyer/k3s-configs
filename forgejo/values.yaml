@@ -344,11 +344,13 @@ gitea:
   ## @param gitea.config  Configuration for the Forgejo server,ref: [config-cheat-sheet](https://docs.gitea.io/en-us/config-cheat-sheet/)
   config:
     APP_NAME: "Sachin Iyer's Git Instance"
-  #  RUN_MODE: dev
-  #
+    #  RUN_MODE: dev
+    #
     server:
-  #    SSH_PORT: 22
+      #    SSH_PORT: 22
       ROOT_URL: https://git.sachiniyer.com
+    service:
+      DISABLE_REGISTRATION: true
 
   #  server:
   #    SSH_PORT: 22

@@ -29,6 +29,8 @@ RUN pip install --no-cache-dir torch torchvision torchaudio \
                                optax \
                                transformers datasets \
                                nltk \
+                               plotly \
+                               dash \
                                pytorch_lightning \
                                gradio \
                                sentencepiece \

@@ -25,7 +25,7 @@ singleuser:
   allowPrivilegeEscalation: true
   image:
     name: sachiyer/jupyterhub
-    tag: "latest"
+    tag: "v2"
   storage:
     dynamic:
       storageClass: rook-ceph-block
