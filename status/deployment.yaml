@@ -21,5 +21,7 @@ spec:
           env:
             - name: NGINX
               value: "https://raw.githubusercontent.com/sachiniyer/cheap_portable_k3s/main/nginx.conf"
+            - name: BIND_ADDR
+              value: "0.0.0.0:3000"
           ports:
             - containerPort: 3000
