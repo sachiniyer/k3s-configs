@@ -8,22 +8,22 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-  - host: sachiniyer.com
-    http:
-      paths:
-      - path: /sync
-        pathType: Prefix
-        backend:
-          service:
-            name: mysite-service
-            port:
-              number: 90
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: mysite-service
-            port:
-              number: 80
+    - host: sachiniyer.com
+      http:
+        paths:
+          - path: /sync
+            pathType: prefix
+            backend:
+              service:
+                name: mysite-service
+                port:
+                  number: 90
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mysite-service
+                port:
+                  number: 80
   tls:
-  - secretName: website-cert
+    - secretName: website-cert
