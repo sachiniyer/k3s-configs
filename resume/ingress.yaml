@@ -3,18 +3,27 @@ kind: Ingress
 metadata:
   name: resume-ingress
   namespace: website
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: website-redirect@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
-  - host: sachiniyer.com
-    http:
-      paths:
-      - backend:
-          service:
-            name: resume-service
-            port:
-              number: 80
-        path: /resume
-        pathType: Prefix
+    - host: sachiniyer.com
+      http:
+        paths:
+          - path: /ressync
+            pathType: Prefix
+            backend:
+              service:
+                name: resume-service
+                port:
+                  number: 90
+          - path: /resume
+            pathType: Prefix
+            backend:
+              service:
+                name: resume-service
+                port:
+                  number: 80
   tls:
-  - secretName: website-cert
+    - secretName: website-cert

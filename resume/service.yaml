@@ -8,13 +8,17 @@ metadata:
 spec:
   internalTrafficPolicy: Cluster
   ipFamilies:
-  - IPv4
+    - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-  - name: web
-    port: 80
-    protocol: TCP
-    targetPort: 80
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: sync
+      port: 90
+      protocol: TCP
+      targetPort: 90
   selector:
     app: resume
   sessionAffinity: None

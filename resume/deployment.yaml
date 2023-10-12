@@ -37,6 +37,8 @@ spec:
               value: "0.0.0.0:90"
             - name: GITSYNC_WEBHOOK_SYNC
               value: "1"
+            - name: GITSYNC_WEBHOOK_SYNC_URI
+              value: "/ressync"
           image: sachiyer/git-sync:latest
           imagePullPolicy: Always
           name: git-sync
