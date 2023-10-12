@@ -34,11 +34,13 @@ serviceAccount:
 podAnnotations: {}
 
 # -- pod-level security context
-podSecurityContext: {}
+podSecurityContext:
+  {}
   # fsGroup: 2000
 
 # -- container-level security context
-securityContext: {}
+securityContext:
+  {}
   # capabilities:
   #   drop:
   #   - ALL
@@ -76,7 +78,8 @@ ingress:
         - s.sachiniyer.com
 
 # -- Resource limits and requests for the pods.
-resources: {}
+resources:
+  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
@@ -110,7 +113,8 @@ tolerations: []
 affinity: {}
 
 # -- additional environment variables to be added to the pods
-extraEnv: []
+extraEnv:
+  []
   # - name: FOO
   #   value: BAR
 
@@ -147,12 +151,12 @@ kutt:
     safeBrowsingKey: ""
   jwt:
     # -- Use existing secret for JWT secret key. The secret has to contain the key `JWT_SECRET`. When it's set the kutt.jwt.key is ignored.
-    existingSecret: ""
+    existingSecret:
     # -- make sure to replace with your own secret key
     key:
   mail:
     # -- Support email to show on the app
-    contactEmail:
+    contactEmail: "sachinjiyer@gmail.com"
     # -- Use existing secret for password details. The secret has to contain the key `MAIL_PASSWORD`. When it's set the `kutt.mail.password` is ignored.
     existingSecret: ""
     # -- The email address Kutt will send emails from.
@@ -232,4 +236,3 @@ externalRedis:
   hostname: ""
   # -- Port used to connect to Redis
   port: 6379
-
