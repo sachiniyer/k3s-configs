@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir jupyterlab-vim \
                                jupyterlab-github \
                                jupyterlab-gitlab \
                                jupyter-ai \
-                               jupyterlab_autoversion
+                               jupyterlab_autoversion \
+                               jupyter-dash
 
 ENV TRANSFORMERS_CACHE=/tmp/.cache
 ENV TOKENIZERS_PARALLELISM=true
