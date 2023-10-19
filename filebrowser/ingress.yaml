@@ -3,6 +3,8 @@ kind: Ingress
 apiVersion: networking.k8s.io/v1
 metadata:
   name: filebrowser-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: filebrowser-redirect@kubernetescrd
 spec:
   tls:
     - secretName: filebrowser-cert
@@ -29,5 +31,15 @@ spec:
   dnsNames:
     - share.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: filebrowser
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

@@ -29,5 +29,5 @@ spec:
   dnsNames:
     - pass.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
