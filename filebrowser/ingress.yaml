@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 metadata:
   name: filebrowser-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: filebrowser-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: "filebrowser-redirect@kubernetescrd, filebrowser-cors@kubernetescrd"
 spec:
   tls:
     - secretName: filebrowser-cert
@@ -43,3 +43,21 @@ spec:
   redirectScheme:
     scheme: https
     permanent: true
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors
+  namespace: filebrowser
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "OPTIONS"
+      - "PUT"
+    accessControlAllowHeaders:
+      - "*"
+    accessControlAllowOriginList:
+      - "https://sachiniyer.com"
+    accessControlMaxAge: 100
+    addVaryHeader: true
