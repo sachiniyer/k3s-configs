@@ -8,7 +8,7 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 
 # In Progress
 ## Put everything in repo
-- [X] Test
+- [X] test
 - [X] school-demo
 - [ ] rook-ceph
 - [X] nextcloud
@@ -19,19 +19,22 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [X] dav
 - [X] metallb
 - [X] prometheus
-- [ ] ctf
 - [X] blog
 - [X] privatebin
 - [X] minecraft
 - [X] nfty
 - [X] kutt
-- [ ] ovpn
 - [X] status
 - [X] matomo
 - [X] tweets
 - [X] forgejo
 - [X] debian
 - [X] resow
+- [X] sembox
+- [X] rss
+- [X] filebrowser
+- [X] schooldemo
+- [X] traefik
 ## Migrate everything over to git-sync-webhooks
 - [X] website
 - [X] resume
@@ -39,4 +42,4 @@ Things are haphazard, sorry. If you want to know more about the cluster I have a
 - [X] emptypad
 - [X] blog
 ## get dns working
-- [ ] deploy either coredns + dns forworder or dnscrypt
+- [x] deploy either ~coredns + dns forworder or dnscrypt~ just public dns
