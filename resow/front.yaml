@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: resow-front
-          image: sachiyer/resow-front
+          image: sachiyer/resow-front:v1
           ports:
             - containerPort: 3000
           env:
@@ -64,15 +64,15 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: resow-redirect@kubernetescrd
 spec:
   tls:
-  - secretName: resow-front-cert
+    - secretName: resow-front-cert
   rules:
-  - host: resow.sachiniyer.com
-    http:
-      paths:
-       - path: /
-         pathType: Prefix
-         backend:
-           service:
-             name: resow-front
-             port:
-               number: 80
+    - host: resow.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: resow-front
+                port:
+                  number: 80
