@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sembox-front
+spec:
+  selector:
+    matchLabels:
+      app: sembox-front
+  template:
+    metadata:
+      labels:
+        app: sembox-front
+    spec:
+      containers:
+        - name: sembox-front
+          image: sachiyer/sembox-site:v5
+          ports:
+            - containerPort: 3000
+          env:
+            - name: API_URL
+              value: https://sembox-api.sachiniyer.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sembox-front
+spec:
+  selector:
+    app: sembox-front
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sembox-front-cert
+  namespace: sembox
+spec:
+  commonName: sembox.sachiniyer.com
+  secretName: sembox-front-cert
+  dnsNames:
+    - sembox.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: sembox
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: sembox-front-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: sembox-redirect@kubernetescrd
+spec:
+  tls:
+    - secretName: sembox-front-cert
+  rules:
+    - host: sembox.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sembox-front
+                port:
+                  number: 80

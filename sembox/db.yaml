@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sembox-db
+spec:
+  selector:
+    matchLabels:
+      app: sembox-db
+  template:
+    metadata:
+      labels:
+        app: sembox-db
+    spec:
+      containers:
+        - name: sembox-db
+          image: sachiyer/sembox-db
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value:
+            - name: NEW_POSTGRES_USER
+              value: sem
+            - name: NEW_POSTGRES_DB
+              value: semdb
+            - name: NEW_POSTGRES_PASSWORD
+              value:
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sembox-db
+spec:
+  selector:
+    app: sembox-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
