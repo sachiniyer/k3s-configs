@@ -1,4 +1,3 @@
-USER-SUPPLIED VALUES:
 affinity: {}
 cronjob:
   enabled: false
@@ -110,7 +109,6 @@ nextcloud:
       port: 465
       secure: ssl
   password:
-  password:
   persistence:
     subPath: null
   phpConfigs: {}
@@ -174,7 +172,7 @@ readinessProbe:
 redis:
   auth:
     enabled: true
-    password:
+    password: asnjk
   enabled: true
 replicaCount: 1
 resources: {}
