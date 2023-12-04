@@ -1,0 +1,45 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rss-cert
+  namespace: rss
+spec:
+  commonName: rss.sachiniyer.com
+  secretName: rss-cert
+  dnsNames:
+    - rss.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: rss
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: rss-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: rss-redirect@kubernetescrd
+spec:
+  tls:
+    - secretName: rss-cert
+  rules:
+    - host: rss.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rss-freshrss
+                port:
+                  number: 80
