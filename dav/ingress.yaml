@@ -31,7 +31,7 @@ spec:
   dnsNames:
     - dav.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
 ---
 apiVersion: traefik.containo.us/v1alpha1

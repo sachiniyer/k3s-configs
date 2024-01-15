@@ -5,18 +5,18 @@ metadata:
   name: test-ingress
 spec:
   tls:
-  - secretName: test-cert
+    - secretName: test-cert
   rules:
-  - host: test.sachiniyer.com
-    http:
-      paths:
-       - path: /
-         pathType: Prefix
-         backend:
-           service:
-             name: nginx-service
-             port:
-               number: 80
+    - host: test.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-service
+                port:
+                  number: 80
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -29,7 +29,7 @@ spec:
   dnsNames:
     - test.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
 ---
 apiVersion: v1
@@ -43,7 +43,7 @@ spec:
     - port: 80
       protocol: TCP
   selector:
-    app:  nginx
+    app: nginx
 
 ---
 apiVersion: apps/v1
@@ -61,14 +61,14 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx
-        ports:
-        - containerPort: 80
-        volumeMounts:
-        - name: html-volume
-          mountPath: /usr/share/nginx/html
+        - name: nginx
+          image: nginx
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html-volume
+              mountPath: /usr/share/nginx/html
       volumes:
-      - name: html-volume
-        configMap:
-          name: test-html
+        - name: html-volume
+          configMap:
+            name: test-html
