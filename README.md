@@ -7,6 +7,10 @@ All passwords should be in a gpg encrypted file called pass (I am including it c
 Things are haphazard, sorry. If you want to know more about the cluster I have a [separate repo](https://github.com/sachiniyer/cheap_portable_k3s)
 
 # In Progress
+## TODO
+- [ ] cal.com for office hours
+- [ ] wiki for cluster
+- [ ] merge repos (and add docker container for nginx sync)
 ## Put everything in repo
 - [X] test
 - [X] school-demo
