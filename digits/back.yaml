@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digits-back
+spec:
+  selector:
+    matchLabels:
+      app: digits-back
+  template:
+    metadata:
+      labels:
+        app: digits-back
+    spec:
+      containers:
+        - name: digits-back
+          resources:
+            requests:
+              memory: "1Gi"
+            limits:
+              memory: "5Gi"
+          image: sachiyer/mnist-wasm-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: WEIGHTS
+              value: "/home/api/pretrained.txt"
+            - name: BIND_URL
+              value: "0.0.0.0:8000"
+            - name: DATA
+              value: "/home/api/data"
+            - name: LEARNING_RATE
+              value: "0.01"
+            - name: BATCH_SIZE
+              value: "128"
+            - name: TRAIN_ITER
+              value: "3000"
+            - name: TEST_ITER
+              value: "500"
+            - name: OUTPUT_LEVEL
+              value: "2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: digits-back
+spec:
+  selector:
+    app: digits-back
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "OPTIONS"
+      - "PUT"
+      - "POST"
+      - "DELETE"
+    accessControlAllowOriginList:
+      - "https://digits.sachiniyer.com"
+      - "http://127.0.0.1:3000"
+    accessControlMaxAge: 100
+    addVaryHeader: true
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: digits-back-cert
+  namespace: digits
+spec:
+  commonName: digits-api.sachiniyer.com
+  secretName: digits-back-cert
+  dnsNames:
+    - digits-api.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: digits-back-ingress
+  # annotations:
+  #   traefik.ingress.kubernetes.io/router.middlewares: digits-cors-header@kubernetescrd
+spec:
+  tls:
+    - secretName: digits-back-cert
+  rules:
+    - host: digits-api.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: digits-back
+                port:
+                  number: 80

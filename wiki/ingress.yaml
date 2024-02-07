@@ -1,0 +1,52 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wiki-cert
+  namespace: wiki
+spec:
+  commonName: wiki.sachiniyer.com
+  secretName: wiki-cert
+  dnsNames:
+    - wiki.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: wiki
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: wiki-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: wiki-redirect@kubernetescrd
+spec:
+  tls:
+    - secretName: wiki-cert
+  rules:
+    - host: wiki.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wiki-service
+                port:
+                  number: 80
+          - path: /sync
+            pathType: Prefix
+            backend:
+              service:
+                name: wiki-service
+                port:
+                  number: 90
