@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crabfit-back-pvc
+  namespace: crabfit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crabfit-back
+spec:
+  selector:
+    matchLabels:
+      app: crabfit-back
+  template:
+    metadata:
+      labels:
+        app: crabfit-back
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: coffeeproject
+      containers:
+        - name: crabfit-back
+          resources:
+            requests:
+              memory: "1Gi"
+            limits:
+              memory: "5Gi"
+          image: sachiyer/crab.fit.api:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: FRONTEND_URL
+              value: "https://meet.sachiniyer.com"
+            - name: DATABASE_URL
+              value:
+          volumeMounts:
+            - name: crabfit-back-pvc
+              mountPath: /app/files
+      volumes:
+        - name: crabfit-back-pvc
+          persistentVolumeClaim:
+            claimName: crabfit-back-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crabfit-back
+spec:
+  selector:
+    app: crabfit-back
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "OPTIONS"
+      - "PUT"
+      - "POST"
+      - "DELETE"
+    accessControlAllowOriginList:
+      - "https://crabfit.sachiniyer.com"
+    accessControlMaxAge: 100
+    addVaryHeader: true
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: crabfit-back-cert
+  namespace: crabfit
+spec:
+  commonName: crabfit-api.sachiniyer.com
+  secretName: crabfit-back-cert
+  dnsNames:
+    - crabfit-api.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: crabfit-back-ingress
+  annotations:
+    # traefik.ingress.kubernetes.io/router.middlewares: crabfit-cors-header@kubernetescrd
+spec:
+  tls:
+    - secretName: crabfit-back-cert
+  rules:
+    - host: crabfit-api.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crabfit-back
+                port:
+                  number: 80

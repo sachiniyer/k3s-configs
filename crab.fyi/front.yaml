@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crabfit-front
+spec:
+  selector:
+    matchLabels:
+      app: crabfit-front
+  template:
+    metadata:
+      labels:
+        app: crabfit-front
+    spec:
+      containers:
+        - name: crabfit-front
+          image: sachiyer/crab.fit.site:v5
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crabfit-front
+spec:
+  selector:
+    app: crabfit-front
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: crabfit-front-cert
+  namespace: crabfit
+spec:
+  commonName: meet.sachiniyer.com
+  secretName: crabfit-front-cert
+  dnsNames:
+    - meet.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: crabfit
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: crabfit-front-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: crabfit-redirect@kubernetescrd
+spec:
+  tls:
+    - secretName: crabfit-front-cert
+  rules:
+    - host: meet.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crabfit-front
+                port:
+                  number: 80

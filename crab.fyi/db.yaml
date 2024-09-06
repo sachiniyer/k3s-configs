@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crabfit-db
+spec:
+  selector:
+    matchLabels:
+      app: crabfit-db
+  template:
+    metadata:
+      labels:
+        app: crabfit-db
+    spec:
+      containers:
+        - name: crabfit-db
+          image: sachiyer/sembox-db # just a general purpose postgres
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value:
+            - name: NEW_POSTGRES_USER
+              value: crab
+            - name: NEW_POSTGRES_DB
+              value: crabfit
+            - name: NEW_POSTGRES_PASSWORD
+              value:
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crabfit-db
+spec:
+  selector:
+    app: crabfit-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
