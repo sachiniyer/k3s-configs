@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-front
+spec:
+  selector:
+    matchLabels:
+      app: invoice-front
+  template:
+    metadata:
+      labels:
+        app: invoice-front
+    spec:
+      containers:
+        - name: invoice-front
+          image: sachiyer/invoice-front:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_WAPI
+              value: "wss://invoice-api.sachiniyer.com"
+            - name: REACT_APP_HAPI
+              value: "https://invoice-api.sachiniyer.com"
+            - name: REACT_APP_USERNAME_COOKIE
+              value: "invoice-categorization-username"
+            - name: REACT_APP_TOKEN_COOKIE
+              value: "invoice-categorization-token"
+            - name: REACT_APP_DISABLE
+              value: "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoice-front
+spec:
+  selector:
+    app: invoice-front
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: invoice-front-cert
+  namespace: invoice
+spec:
+  commonName: invoice.sachiniyer.com
+  secretName: invoice-front-cert
+  dnsNames:
+    - invoice.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: invoice
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: invoice-front-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: invoice-redirect@kubernetescrd
+spec:
+  tls:
+    - secretName: invoice-front-cert
+  rules:
+    - host: invoice.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: invoice-front
+                port:
+                  number: 80

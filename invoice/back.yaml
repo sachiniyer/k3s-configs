@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-back
+spec:
+  selector:
+    matchLabels:
+      app: invoice-back
+  template:
+    metadata:
+      labels:
+        app: invoice-back
+    spec:
+      containers:
+        - name: invoice-back
+          image: sachiyer/invoice-back:v3
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ORIGIN
+              value: "https://invoice.sachiniyer.com"
+            - name: SECRET_KEY
+              value:
+            - name: SALT
+              value:
+            - name: JWT_KEY
+              value:
+            - name: JWT_ALGO
+              value: "HS512"
+            - name: JWT_ISS
+              value: "Invoice Categorization"
+            - name: JWT_TIMEOUT
+              value: "3600"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: TEMP_FILE_LOCATION
+              value: "files"
+            - name: AWS_API_KEY
+              value:
+            - name: AWS_API_SECRET
+              value:
+            - name: AWS_USER_TABLE_NAME
+              value: "treya-users"
+            - name: AWS_FILE_TABLE_NAME
+              value: "treya-files"
+            - name: AWS_S3_UPLOAD_NAME
+              value: "invoice-categorization-upload"
+            - name: AWS_S3_PROCESSED_NAME
+              value: "invoice-categorization-processed"
+            - name: AWS_ROLE_ARN
+              value:
+            - name: AWS_MODEL_ID
+              value: "anthropic.claude-3-haiku-20240307-v1:0"
+            - name: MODEL_DOWNLOAD_PATH
+              value: "./download"
+            - name: MODEL_UPLOAD_PATH
+              value: "./upload"
+            - name: CHUNK_SIZE
+              value: "4000000"
+            - name: DEBUG
+              value: "True"
+            - name: DISABLE
+              value: "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoice-back
+spec:
+  selector:
+    app: invoice-back
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: cors
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "OPTIONS"
+      - "PUT"
+      - "POST"
+      - "DELETE"
+    accessControlAllowOriginList:
+      - "https://invoice.sachiniyer.com"
+    accessControlMaxAge: 100
+    addVaryHeader: true
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: invoice-back-cert
+  namespace: invoice
+spec:
+  commonName: invoice-api.sachiniyer.com
+  secretName: invoice-back-cert
+  dnsNames:
+    - invoice-api.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: invoice-back-ingress
+spec:
+  tls:
+    - secretName: invoice-back-cert
+  rules:
+    - host: invoice-api.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: invoice-back
+                port:
+                  number: 80
