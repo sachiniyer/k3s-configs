@@ -13,7 +13,8 @@ spec:
     spec:
       containers:
         - name: digits-front
-          image: sachiyer/mnist-wasm-site:latest
+          image: sachiyer/mnist-wasm-site:v1
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
 ---
