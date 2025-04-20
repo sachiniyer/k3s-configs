@@ -1,12 +1,12 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: secure-sachiniyer-cert
+  name: secure-test-sachiniyer-cert
 spec:
-  commonName: secure.sachiniyer.com
-  secretName: secure-sachiniyer-cert
+  commonName: secure-test.sachiniyer.com
+  secretName: secure-test-sachiniyer-cert
   dnsNames:
-    - secure.sachiniyer.com
+    - secure-test.sachiniyer.com
   issuerRef:
-    name: letsencrypt-stage-dns
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer

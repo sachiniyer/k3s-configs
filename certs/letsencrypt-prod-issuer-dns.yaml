@@ -15,6 +15,7 @@ spec:
         dns01:
           route53:
             region: us-east-1
+            hostedZoneID: Z0370584AYCR7LWUA9NW
             accessKeyIDSecretRef:
               name: prod-route53-credentials-secret
               key: access-key-id
