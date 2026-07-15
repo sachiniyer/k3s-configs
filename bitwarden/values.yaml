@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: vaultwarden/server
-  tag: latest
+  tag: "1.35.7"
   pullPolicy: IfNotPresent
 
 env:

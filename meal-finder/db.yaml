@@ -1,0 +1,114 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: meal-finder
+spec:
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      nodeSelector:
+        # Necessary, because the latest version of mongo needs an updated cpu
+        kubernetes.io/hostname: herkimer
+      containers:
+        - name: mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongo-init
+              mountPath: /docker-entrypoint-initdb.d
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "admin"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value:
+            - name: MONGO_INITDB_DATABASE
+              value: "assistant_db"
+            - name: MONGODB_USER
+              value: "assistant_user"
+            - name: MONGODB_PASSWORD
+              value:
+      volumes:
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: mongodb-pvc
+        - name: mongo-init
+          configMap:
+            name: mongo-init-script
+            defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: meal-finder
+spec:
+  selector:
+    app: mongodb
+  ports:
+    - name: mongo-port
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: meal-finder
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init-script
+  namespace: meal-finder
+data:
+  mongo-init.sh: |
+    #!/bin/bash
+    set -e
+
+    # Wait for MongoDB to be ready
+    until mongosh --quiet --eval "db.adminCommand('ping')" > /dev/null 2>&1; do
+      echo "Waiting for MongoDB to be ready..."
+      sleep 1
+    done
+
+    mongosh <<EOF
+    use $MONGO_INITDB_DATABASE
+
+    // Create user for the database
+    db.createUser({
+      user: '$MONGODB_USER',
+      pwd: '$MONGODB_PASSWORD',
+      roles: [
+        {
+          role: 'readWrite',
+          db: '$MONGO_INITDB_DATABASE'
+        }
+      ]
+    });
+
+    // Create collections
+    db.createCollection('chats');
+    db.createCollection('places');
+
+    // Create indexes
+    db.chats.createIndex({ "chat_id": 1 }, { unique: true });
+    db.places.createIndex({ "place_id": 1 }, { unique: true });
+    EOF

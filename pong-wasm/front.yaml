@@ -1,30 +1,30 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: digits-front
+  name: pong-wasm
 spec:
   selector:
     matchLabels:
-      app: digits-front
+      app: pong-wasm
   template:
     metadata:
       labels:
-        app: digits-front
+        app: pong-wasm
     spec:
       containers:
-        - name: digits-front
-          image: sachiyer/mnist-wasm-site:v1
-          imagePullPolicy: Always
+        - name: pong-wasm
+          image: sachiyer/pong-wasm
           ports:
             - containerPort: 80
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: digits-front
+  name: pong-wasm
 spec:
   selector:
-    app: digits-front
+    app: pong-wasm
   ports:
     - protocol: TCP
       port: 80
@@ -33,13 +33,13 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: digits-front-cert
-  namespace: digits
+  name: pong-wasm-cert
+  namespace: pong-wasm
 spec:
-  commonName: digits.sachiniyer.com
-  secretName: digits-front-cert
+  commonName: pong.sachiniyer.com
+  secretName: pong-wasm-cert
   dnsNames:
-    - digits.sachiniyer.com
+    - pong.sachiniyer.com
   issuerRef:
     name: letsencrypt-prod-dns
     kind: ClusterIssuer
@@ -48,7 +48,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect
-  namespace: digits
+  namespace: pong-wasm
 spec:
   redirectScheme:
     scheme: https
@@ -57,20 +57,20 @@ spec:
 kind: Ingress
 apiVersion: networking.k8s.io/v1
 metadata:
-  name: digits-front-ingress
+  name: pong-wasm-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: digits-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: pong-wasm-redirect@kubernetescrd
 spec:
   tls:
-    - secretName: digits-front-cert
+    - secretName: pong-wasm-cert
   rules:
-    - host: digits.sachiniyer.com
+    - host: pong.sachiniyer.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: digits-front
+                name: pong-wasm
                 port:
                   number: 80

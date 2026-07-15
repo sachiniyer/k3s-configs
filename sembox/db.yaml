@@ -13,9 +13,10 @@ spec:
     spec:
       containers:
         - name: sembox-db
-          image: sachiyer/sembox-db
+          image: sachiyer/sembox-db:v4
           ports:
             - containerPort: 5432
+              name: db-port
           env:
             - name: POSTGRES_PASSWORD
               value:
@@ -34,6 +35,8 @@ spec:
   selector:
     app: sembox-db
   ports:
-    - protocol: TCP
+    - name: db-port
+      protocol: TCP
       port: 5432
-      targetPort: 5432
+      targetPort: db-port
+  type: ClusterIP

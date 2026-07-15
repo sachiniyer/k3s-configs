@@ -1,13 +1,13 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: emptypad-cert
-  namespace: emptypad
+  name: schwinn-cert
+  namespace: schwinn
 spec:
-  commonName: emptypad.sachiniyer.com
-  secretName: emptypad-cert
+  commonName: schwinn.sachiniyer.com
+  secretName: schwinn-cert
   dnsNames:
-    - emptypad.sachiniyer.com
+    - schwinn.sachiniyer.com
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
@@ -16,7 +16,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect
-  namespace: emptypad
+  namespace: schwinn
 spec:
   redirectScheme:
     scheme: https
@@ -25,29 +25,29 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: emptypad-ingress
-  namespace: emptypad
+  name: schwinn-ingress
+  namespace: schwinn
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: emptypad-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: schwinn-redirect@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
-  - host: emptypad.sachiniyer.com
+  - host: schwinn.sachiniyer.com
     http:
       paths:
       - path: /sync
         pathType: Prefix
         backend:
           service:
-            name: emptypad-service
+            name: schwinn-service
             port:
               number: 90
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: emptypad-service
+            name: schwinn-service
             port:
               number: 80
   tls:
-  - secretName: emptypad-cert
+  - secretName: schwinn-cert

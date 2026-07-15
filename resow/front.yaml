@@ -1,36 +1,36 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: resow-front
-spec:
-  selector:
-    matchLabels:
-      app: resow-front
-  template:
-    metadata:
-      labels:
-        app: resow-front
-    spec:
-      containers:
-        - name: resow-front
-          image: sachiyer/resow-front:v1
-          ports:
-            - containerPort: 3000
-          env:
-            - name: REACT_APP_SERVER_HOSTNAME
-              value: https://resow-api.sachiniyer.com
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: resow-front
-spec:
-  selector:
-    app: resow-front
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 3000
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: resow-front
+# spec:
+#   selector:
+#     matchLabels:
+#       app: resow-front
+#   template:
+#     metadata:
+#       labels:
+#         app: resow-front
+#     spec:
+#       containers:
+#         - name: resow-front
+#           image: sachiyer/resow-front:v1
+#           ports:
+#             - containerPort: 3000
+#           env:
+#             - name: REACT_APP_SERVER_HOSTNAME
+#               value: https://resow-api.sachiniyer.com
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: resow-front
+# spec:
+#   selector:
+#     app: resow-front
+#   ports:
+#     - protocol: TCP
+#       port: 80
+#       targetPort: 3000
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -43,10 +43,10 @@ spec:
   dnsNames:
     - resow.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
 ---
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect

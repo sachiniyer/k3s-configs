@@ -1,32 +1,35 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sembox-front
+  name: meal-finder-front
 spec:
   selector:
     matchLabels:
-      app: sembox-front
+      app: meal-finder-front
   template:
     metadata:
       labels:
-        app: sembox-front
+        app: meal-finder-front
     spec:
       containers:
-        - name: sembox-front
-          image: sachiyer/sembox-site:v5
+        - name: meal-finder-front
+          image: sachiyer/meal-finder-front
           ports:
             - containerPort: 3000
           env:
+            - name: NEXT_PUBLIC_BACKEND_URL
+              value: https://meal-finder-api.sachiniyer.com
             - name: API_URL
-              value: https://sembox-api.sachiniyer.com
+              value: https://meal-finder-api.sachiniyer.com
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sembox-front
+  name: meal-finder-front
 spec:
   selector:
-    app: sembox-front
+    app: meal-finder-front
   ports:
     - protocol: TCP
       port: 80
@@ -35,22 +38,22 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: sembox-front-cert
-  namespace: sembox
+  name: meals-front-cert
+  namespace: meal-finder
 spec:
-  commonName: sembox.sachiniyer.com
-  secretName: sembox-front-cert
+  commonName: meals.sachiniyer.com
+  secretName: meals-front-cert
   dnsNames:
-    - sembox.sachiniyer.com
+    - meals.sachiniyer.com
   issuerRef:
-    name: letsencrypt-prod
+    name: letsencrypt-prod-dns
     kind: ClusterIssuer
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect
-  namespace: sembox
+  namespace: meal-finder
 spec:
   redirectScheme:
     scheme: https
@@ -59,20 +62,20 @@ spec:
 kind: Ingress
 apiVersion: networking.k8s.io/v1
 metadata:
-  name: sembox-front-ingress
+  name: meal-finder-front-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: sembox-redirect@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: meal-finder-redirect@kubernetescrd
 spec:
   tls:
-    - secretName: sembox-front-cert
+    - secretName: meals-front-cert
   rules:
-    - host: sembox.sachiniyer.com
+    - host: meals.sachiniyer.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: sembox-front
+                name: meal-finder-front
                 port:
                   number: 80
