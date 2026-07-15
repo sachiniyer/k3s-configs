@@ -1,0 +1,59 @@
+---
+# Daily Vaultwarden backup -> S3 (sachiniyer-cluster-backups, SSE-AES256, 30d lifecycle).
+# Runs in the bitwarden ns so it can mount the RWO data PVC; podAffinity co-locates it
+# on the same node as the vaultwarden pod (RWO = one node). Creds come from the
+# cluster-backup-aws Secret (scoped IAM user, S3 write to the one bucket only) which is
+# NOT committed to git.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vaultwarden-backup
+  namespace: bitwarden
+spec:
+  schedule: "17 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: bitwarden-k8s
+                      app.kubernetes.io/instance: bitwarden
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: backup
+              image: amazon/aws-cli:2.15.30
+              # aws-cli image has no tar, so back up file-level with `aws s3 sync`
+              # to a dated prefix (sqlite WAL files included -> consistent on restore).
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  ts=$(date +%F)
+                  aws s3 sync /data "s3://sachiniyer-cluster-backups/vaultwarden/${ts}/" \
+                    --sse AES256 \
+                    --exclude "icon_cache/*" --exclude "lost+found/*" --exclude "tmp/*"
+                  echo "vaultwarden backup complete: ${ts}"
+              envFrom:
+                - secretRef:
+                    name: cluster-backup-aws
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: us-east-1
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: bitwarden-bitwarden-k8s
+                readOnly: true

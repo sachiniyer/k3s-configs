@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "kubernetes": {
+    "fileMatch": ["\\.yaml$"]
+  },
+  "helm-values": {
+    "fileMatch": ["(^|/)values\\.yaml$"]
+  },
+  "packageRules": [
+    {
+      "description": "Never auto-merge major bumps (breaking / CRD migrations) - review by hand",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "addLabels": ["major-review-required"]
+    },
+    {
+      "description": "Auto-merge digest + patch bumps for leaf app images once CI (if any) passes",
+      "matchUpdateTypes": ["digest", "patch"],
+      "matchManagers": ["kubernetes"],
+      "automerge": false,
+      "addLabels": ["image-update"]
+    },
+    {
+      "description": "Group Helm chart value bumps",
+      "matchManagers": ["helm-values"],
+      "addLabels": ["helm"]
+    }
+  ],
+  "ignorePaths": ["deprecated/**", "**/values-*.yaml"]
+}
