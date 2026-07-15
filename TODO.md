@@ -45,10 +45,11 @@ Then, cluster maintenance:
 - ✅ **Status page**: no-op — it's driven by `nginx.conf`; torn-down hosts were never listed.
 
 **HELD for an attended window (would cause downtime / silent breakage if done unattended):**
-- ⏸️ **Kernel reboots.** Security userspace is patched live; the *reboots* to activate new kernels
-  are held. Tunnel `reboot-required=YES` → EC2 **stop/start** (EIP `eipalloc-09ae41047a0cdd18b`
-  confirmed, so IP is preserved; ~2-3 min full-site downtime). Nodes: reboot only where
-  `reboot-required=YES` (herkimer=no), rolling drain→reboot→uncordon one at a time, gated on Ceph HEALTH_OK.
+- ⏸️ **Kernel reboots** (need attended window; `reboot-required=YES` on **tunnel, devocion, milstead**;
+  herkimer/sey/coffeeproject = no). Security userspace is patched live + auto-upgrades on — only the
+  reboots-to-activate-new-kernel are held.
+  - Tunnel → EC2 **stop/start** (EIP `eipalloc-09ae41047a0cdd18b` confirmed → IP preserved; ~2-3 min full-site downtime).
+  - devocion (hosts osd.1) + milstead → rolling `drain`→reboot→`uncordon`, ONE at a time, only when Ceph is HEALTH_OK.
 - ⏸️ **Helm major upgrades (Phase 4, incl. cert-manager).** All certs currently issue fine; a botched
   cert-manager upgrade breaks renewals silently. Do via reviewed Renovate PRs, attended.
 - ⏸️ **Phase 2 full manifest export** of the keep-list infra namespaces into repo dirs.
