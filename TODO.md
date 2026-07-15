@@ -8,6 +8,35 @@ Legend: 🔴 breaks a live service · 🟠 hygiene/drift · 🟢 nice-to-have/lo
 
 ---
 
+## Progress log — 2026-07-15
+
+Site-wide outage this day was a **home-router failure** breaking the WireGuard data
+path for the home nodes (herkimer/sey/devocion); fixed by a physical router reboot.
+Then, cluster maintenance:
+
+- ✅ **Phase 0 mostly cleared.** `coffeeproject` recovered on its own (Ready); the k3s
+  version skew converged (all nodes `v1.36.2+k3s1`); crabfit-back/sembox-back no longer Pending.
+- ✅ **Ceph `osd.2` recovered.** Disk is USB-attached (device-letter drift); pod had been
+  crashlooping on stale activation + a `root`-owned device node (EACCES). Restarted the pod →
+  `ceph-volume raw activate` re-chowned `/dev/sdb` and re-primed; osd.2 is `up`+`in`, cluster
+  backfilling to HEALTH_OK. **Still TODO:** move disk off the USB-SATA adapter; wire OSD-down→ntfy alert.
+- ✅ **Broken certs fixed.** Deleted orphan `meal-finder-front-cert` (app already uses
+  `meals-front-cert` via DNS-01). Switched `nfty-cert` to `letsencrypt-prod-dns` (DNS-01) —
+  HTTP-01 couldn't validate because the host isn't public. `forgejo-cert` removed via teardown.
+  cert-manager itself was healthy — no upgrade was needed for these.
+- ✅ **Phase 1 done** — Traefik v2→v3 CRD migration committed (matched live), untracked dirs added,
+  `crab.fyi`→`crabfit`. Pushed to origin.
+- ✅ **Phase 3 teardowns done (delete-outright, no snapshots):** removed `forgejo`, `jupyterhub`,
+  `dav`, `rss`, `alexbday`, `ctf` (namespaces + PVCs + Helm releases). Reclaimed ~87 GiB raw
+  (Ceph 44.7%→32.6%). Removed repo dirs + `deprecated/{gitea,nextcloud}`.
+
+**Still open (deferred — needs the operator):** remove dead endpoints from the status page UI;
+Phase 2 capture of unmanaged namespaces; Phase 4 Helm/cert-manager upgrades + autoupdate;
+Phase 4b/4c backups (Vaultwarden→S3, headscale DR) + edge patching; `herkimer` mon low-space;
+move osd.2 disk to a real SATA port.
+
+---
+
 ## Phase 0 — Active outages (fix first)
 
 - [ ] 🔴 **Recover or remove the `coffeeproject` node.** Kubelet dead since 2026-06-15
