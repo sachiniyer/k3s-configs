@@ -30,10 +30,29 @@ Then, cluster maintenance:
   `dav`, `rss`, `alexbday`, `ctf` (namespaces + PVCs + Helm releases). Reclaimed ~87 GiB raw
   (Ceph 44.7%→32.6%). Removed repo dirs + `deprecated/{gitea,nextcloud}`.
 
-**Still open (deferred — needs the operator):** remove dead endpoints from the status page UI;
-Phase 2 capture of unmanaged namespaces; Phase 4 Helm/cert-manager upgrades + autoupdate;
-Phase 4b/4c backups (Vaultwarden→S3, headscale DR) + edge patching; `herkimer` mon low-space;
-move osd.2 disk to a real SATA port.
+### Later the same day (2026-07-15) — Phase 2/4 + edge
+- ✅ **Backups (Phase 4b/4c) — the zero-backup gap is closed.** S3 `sachiniyer-cluster-backups`
+  (private, SSE, versioned, 30d). Daily Vaultwarden CronJob + daily headscale systemd timer.
+  Scoped IAM user `cluster-backup`. See `BACKUPS.md`. **Still TODO: test a real restore.**
+- ✅ **Auto-upgrade (Phase 4).** `unattended-upgrades` (security, no reboot) enabled on tunnel +
+  all nodes. `renovate.json` added for review-gated chart/image PRs — **manual step: install the
+  Renovate GitHub App on the repo.** k3s stays on system-upgrade-controller.
+- ✅ **Edge/tunnel security patched** (dnsmasq/wget/vim/etc.); auto-upgrades on.
+- ✅ **headscale**: removed stale `dav` extra-record; restarted clean (config backed up).
+- ✅ **Phase 2 identify + prune:** dropped dead ns `skypilot-system`, `backup` (test-backup),
+  `debian` (debug pod). Keep+capture: `rook-ceph`, `metallb-system` (v0.13.7), `prometheus-operator`
+  (v0.60.1). Uncertain (left alone): `cnpg-system`, `dns` (no workloads).
+- ✅ **Status page**: no-op — it's driven by `nginx.conf`; torn-down hosts were never listed.
+
+**HELD for an attended window (would cause downtime / silent breakage if done unattended):**
+- ⏸️ **Kernel reboots.** Security userspace is patched live; the *reboots* to activate new kernels
+  are held. Tunnel `reboot-required=YES` → EC2 **stop/start** (EIP `eipalloc-09ae41047a0cdd18b`
+  confirmed, so IP is preserved; ~2-3 min full-site downtime). Nodes: reboot only where
+  `reboot-required=YES` (herkimer=no), rolling drain→reboot→uncordon one at a time, gated on Ceph HEALTH_OK.
+- ⏸️ **Helm major upgrades (Phase 4, incl. cert-manager).** All certs currently issue fine; a botched
+  cert-manager upgrade breaks renewals silently. Do via reviewed Renovate PRs, attended.
+- ⏸️ **Phase 2 full manifest export** of the keep-list infra namespaces into repo dirs.
+- **Hardware (not in scope):** move osd.2 disk off USB-SATA; OSD-down→ntfy alert; herkimer mon low-space.
 
 ---
 
