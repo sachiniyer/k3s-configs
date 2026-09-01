@@ -118,6 +118,21 @@ upgrade **oldest-first, test after each**. Do NOT blind-bulk-upgrade stateful ap
 - [ ] Test a real Vaultwarden restore end-to-end. Phase 2 manifest export (rook-ceph/metallb/prometheus-operator).
   herkimer Ceph-mon low disk space. OSD-down→ntfy alert. Move osd.2 off USB-SATA. Decide `cnpg-system`/`dns` ns.
   **Renovate: SKIPPED per operator — remove `renovate.json`.**
+
+## Future project — "hermes" personal-assistant agent (deferred; operator to define scope)
+
+Goal: an agent that helps run personal life, with access to Proton Mail + Proton Calendar + Signal
+(+ Stripe if configured). Not built yet — no `hermes` in repo/cluster. Design before wiring credentials.
+
+Key realities / decisions to make first:
+- **Proton has no public API.** Options: (a) run **Proton Bridge** (IMAP/SMTP; awkward headless) for
+  read+send without Google; (b) **mirror to Gmail** — Proton auto-forward mail → Gmail + subscribe Google
+  Calendar to Proton's read-only ICS link (easy, but one-way/read-only and copies private mail into Google).
+- **Signal**: `signal-cli` with the account linked as a device.
+- **Stripe**: use a **restricted key**; never give an autonomous agent standing charge/transfer access.
+- **Safety posture (recommended):** least-privilege + human-in-the-loop — agent reads and *drafts*
+  replies / *proposes* Stripe actions; operator approves before anything sends or money moves. Widen later.
+- [ ] Operator to decide: what hermes is, Proton-direct vs Gmail-mirror, autonomy level, Stripe scope.
 - ⏸️ **Helm major upgrades (Phase 4, incl. cert-manager).** All certs currently issue fine; a botched
   cert-manager upgrade breaks renewals silently. Do via reviewed Renovate PRs, attended.
 - ⏸️ **Phase 2 full manifest export** of the keep-list infra namespaces into repo dirs.
