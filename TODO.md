@@ -407,3 +407,54 @@ non-HA instance — so it's both the SPOF and the thing we're cautious about res
       (`prod-route53-credentials-secret`, `cert-manager` ns). Its value was printed into an assistant
       session transcript on 2026-08-10 during debugging. Create a new access key, update the secret,
       verify issuance, then delete the old key.
+
+## Upgrade results — 2026-08-10 session 3
+
+**Upgraded + verified (one at a time, revert-on-fail):**
+- ✅ prom/pushgateway v1.5.1 → **v1.11.3**
+- ✅ system-upgrade-controller v0.13.4 → **v0.20.1**
+- ✅ node-exporter v1.5.0 → **v1.12.1** (DaemonSet)
+- ✅ alertmanager v0.25.0 → **v0.34.0** (StatefulSet)
+- ✅ **prometheus v2.41.0 → v3.14.0** (major) — only after fixing the disk, see below
+- ✅ configmap-reload v0.8.0 → **v0.9.0**
+- ✅ prometheus-operator v0.60.1 → **v0.93.1**
+- ✅ meal-finder mongo: **pinned `:latest` → `8.3.8`** (it had silently auto-upgraded itself to 8.3.8/FCV 8.0;
+      unpinned `:latest` on a database is dangerous — a future pull could jump a major and break FCV)
+
+### 🔴 Found + fixed: prometheus was wedged by a runaway WAL
+`prometheus-server` PVC (30Gi) was **100% full** and prometheus could not start
+(`write /data/queries.active: no space left on device`). Cause: **`/data/wal` had grown to 25.6G**
+(279 segments) — prometheus couldn't checkpoint/truncate because the disk was full, and couldn't start
+because of the WAL. Self-sustaining wedge; monitoring had been degraded.
+Fix: scaled to 0, removed `wal` + `chunks_head` via a helper pod (historical blocks kept),
+added **`--storage.tsdb.retention.size=18GB`** alongside the existing `retention.time=15d` so it can't
+refill. Now **1.3G used / 28.1G free (5%)** and prometheus v3.14.0 reports "Server is ready".
+- [ ] 🟠 Note: `retention.size` was added with `kubectl patch`; a future `helm upgrade` of the
+      prometheus chart will drop it. Move it into the chart values.
+
+### mongo — answered: almost nothing of value
+- `resow` mongodb 6.0.7 (FCV 6.0): **posts=3, mycollection=2, users=2** — 5 documents. The 498M is
+  engine overhead. Not worth a 6→7→8 FCV-stepped upgrade; left as-is.
+- `meal-finder` mongo: already **8.3.8 / FCV 8.0**, `places=185, chats=21`. Pinned (see above).
+- Both dumped with `mongodump --archive --gzip` to `s3://…/archive/mongo/` (permanent):
+  resow 2.0 KiB, meal-finder 790.7 KiB. Restore with `mongorestore --archive --gzip`.
+
+### Deliberately NOT upgraded
+- [ ] 🔴 **rook/ceph v1.10.10 → v1.20.6** — must follow rook's documented per-minor upgrade path; a blind
+      image bump on the storage operator risks the data plane. Own session.
+- [ ] 🟠 **kutt v2.7.4 → v3.2.6** (major; Postgres + Redis) — dump Postgres to `archive/` first.
+- [ ] 🟠 **matomo 4.15.1 → 5.x** (MariaDB schema migration) — dump MariaDB to `archive/` first.
+- [ ] 🟠 **metallb v0.13.7** — appears **unused**: the only LoadBalancer svc is traefik and its external
+      IPs are all 5 node IPs (that's k3s klipper servicelb, not metallb). minecraft was its consumer and
+      is gone. Either upgrade properly via manifests/CRDs, or **remove it**. An image-only bump would
+      skip required CRD changes.
+- [ ] 🟢 kube-state-metrics v2.8.0 — version lookup was GitHub-rate-limited; check and bump.
+- [ ] 🟢 filebrowser — left alone per operator.
+
+### ntfy: works in-cluster, but you probably can't receive it
+Messages publish and cache correctly (verified), **but `nfty` is not in `nginx.conf`**, so
+`nfty.sachiniyer.com` resolves to the wildcard → mesh IP `100.64.0.3` and is 404 from the internet.
+Only mesh-connected devices can subscribe. Also **ntfy auth is disabled** (`config.enabled: false`),
+so exposing it publicly as-is would let anyone read/publish your topics.
+- [ ] Decide: (a) add `nfty` to nginx.conf **and enable ntfy auth**, (b) keep mesh-only and connect a
+      device to the mesh, or (c) use hosted ntfy.sh with a secret topic.
