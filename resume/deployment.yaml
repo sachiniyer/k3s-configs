@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - env:
-            - name: GIT_SYNC_REPO
+            - name: GITSYNC_REPO
               value: "https://github.com/sachiniyer/resume.git"
             - name: GITSYNC_BRANCH
               value: master

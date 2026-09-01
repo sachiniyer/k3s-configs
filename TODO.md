@@ -526,3 +526,66 @@ v0.13.4-era install lacks `customresourcedefinitions` (list/create) at cluster s
 
 **Operator's judgment (own projects / old demos — cannot assess usage from here):**
 `school-demo`, `tweets`, `digits` (mnist demo), `pong-wasm`, `crabfit`, `emptypad`, `sembox`, `resow`.
+
+## 2026-09-01 incident + findings (self-inflicted outage, recovered)
+
+### 🔴 sachiniyer.com 503 outage — cause and fix
+`mysite-deployment`'s git-sync crash-looped with
+`server certificate verification failed. CAfile: none`, so the pod never became Ready,
+`mysite-service` had **zero endpoints**, and traefik returned 503 (this also broke
+status.sachiniyer.com, which enumerates sites from nginx.conf).
+
+**Cause: self-inflicted.** The `k3s crictl rmi --prune` I ran on herkimer during disk cleanup
+removed image layers still referenced by that **569-day-old running container**, so its rootfs lost
+`/etc/ssl/certs`. Evidence it was *not* a bad image: every git-sync pod runs the **same imageID**, the
+CA bundle **is** present in the image, and freshly-created pods work fine.
+**Fix:** recreating the pod (re-applying `website/deployment.yaml`) restored it.
+- [ ] 🟠 **Lesson: never `crictl rmi --prune` on a node with very long-lived containers.** Prefer
+      `crictl rmi --prune` only right after a reboot, or drain the node first.
+- [ ] 🟠 Drift to clean: mysite git-sync still has a leftover `ca-certs` hostPath mount of
+      `/etc/ssl/certs/ca-certificates.crt` that I added while debugging. Harmless (host CA over the
+      image's own) but not in the repo manifest. Remove with a `$patch: replace` on volumeMounts, or
+      delete+re-apply the deployment. **Do not** remove it with index-based JSON patches — doing that
+      deleted the wrong mount (`nginx:/git`) and caused a second outage (404, content unserved).
+
+### 🟠 blog/deployment.yaml had no namespace
+`kubectl apply -f blog/deployment.yaml` created a **stray duplicate `hugo-deployment` in `default`**
+while the real one in `blog` kept the old env names. Stray deleted; `namespace: blog` added to the
+manifest so this can't recur. (`resume/deployment.yaml` already declared `namespace: website`.)
+
+### ✅ git-sync env var modernisation
+git-sync v4 deprecates `GIT_SYNC_*` in favour of `GITSYNC_*` (it still honours the old names but logs
+`env GIT_SYNC_REPO has been deprecated`). Renamed all remaining usages
+(`resume/deployment.yaml`, `blog/deployment.yaml` x4) and applied. resume was **never** broken — it was
+syncing fine, just warning.
+
+### 🔴 Bitnami pulled their free images off Docker Hub
+`bitnami/*` on Docker Hub is now **empty** (`count: 0`); images moved to **`bitnamilegacy/*`** and current
+builds are behind paid Bitnami Secure Images. Verified: `crictl pull` FAILED for
+`bitnami/{mariadb,postgresql,redis,mongodb,matomo}` at the exact tags in use. They survived only in each
+node's local cache — meaning **any reschedule to a node without the cached image = ImagePullBackOff**.
+That was a live landmine through today's 5 node reboots.
+**Mitigated:** repointed matomo, matomo-mariadb, kutt-postgresql, kutt-redis-master and resow mongo (plus
+their exporter sidecars) to `bitnamilegacy/*`, all verified pullable and Running.
+- [ ] 🔴 **Record the `bitnamilegacy` repointing in the repo** — it was applied with `kubectl set image`,
+      so a `helm upgrade` of matomo/kutt/resow would revert to the unpullable `bitnami/*` refs.
+- [ ] 🟠 **matomo 4→5 upgrade is blocked**: chart 11.0.0 wants `bitnami/matomo:5.3.2-debian-12-r12`,
+      which no longer exists. Options: (a) chart 11.0.0 with `image.repository=bitnamilegacy/matomo`
+      (tag 5.3.2 does exist there), (b) migrate off bitnami to the official `matomo` image, (c) stay on
+      4.15.1. Longer term, bitnami charts are now a paid product — plan a migration.
+
+### ✅ matomo "no visitors" explained — nothing was misconfigured server-side
+`track.sachiniyer.com/matomo.php` and `/matomo.js` both return 200, and the real DB
+(**`bitnami_matomo`**, 99 tables) holds **1,383 visits / 2,863 action hits**, site 1 = https://sachiniyer.com.
+**Last visit: 2024-12-23.** The tracking snippet in the website repo
+(`sachiniyer.com/packages/matomo.js`) is **entirely commented out** — every line `//`-prefixed — so no
+hit has been sent since. Historical data is intact.
+- [ ] 🔴 **Uncomment the tracker** in the website source repo (this is the actual fix).
+- [ ] 🟠 blog and wiki embed **no** tracker at all — add it if you want them counted.
+- Note: my first matomo "backup" was 340 bytes because I dumped a non-existent `matomo` DB. The correct
+  dump of `bitnami_matomo` (2.6 MiB, 99 `CREATE TABLE`s) is now in `archive/matomo/`.
+
+### Requested next: switch to webhook-based git-sync
+- [ ] 🟠 Move these deployments to the **`sachiniyer/git-sync-webhooks`** image/approach (webhooks instead
+      of 10s polling). All 6 git-sync deployments currently poll (`--period=10s`). Needs: the webhook
+      receiver reachable from GitHub, a webhook secret, and per-repo GitHub webhook config.

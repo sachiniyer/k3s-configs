@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: blog
   name: hugo-deployment
   labels:
     app: hugo
@@ -28,11 +29,11 @@ spec:
               value: "0.0.0.0:90"
             - name: GITSYNC_WEBHOOK_SYNC
               value: "1"
-            - name: GIT_SYNC_MAX_FAILURES
+            - name: GITSYNC_MAX_FAILURES
               value: "-1"
-            - name: GIT_SYNC_DEPTH
+            - name: GITSYNC_DEPTH
               value: "1"
-            - name: GIT_SYNC_SUBMODULES
+            - name: GITSYNC_SUBMODULES
               value: "recursive"
           image: sachiyer/git-sync:latest
           imagePullPolicy: Always
