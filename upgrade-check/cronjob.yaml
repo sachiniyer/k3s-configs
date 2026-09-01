@@ -1,0 +1,167 @@
+---
+# Weekly upgrade CHECKER. Deliberately does not apply anything: on 2026-08-10 a single batch of
+# app upgrades produced one that needed a strategy change (Vaultwarden), one that broke outright
+# (filebrowser), and one clean major bump (privatebin). So: detect automatically, apply by hand.
+# Reports outdated container images to ntfy topic "cluster-updates".
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: upgrade-check
+  namespace: system-upgrade
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: upgrade-check-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: upgrade-check-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: upgrade-check-read
+subjects:
+  - kind: ServiceAccount
+    name: upgrade-check
+    namespace: system-upgrade
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upgrade-check-script
+  namespace: system-upgrade
+data:
+  check.py: |
+    import json, os, re, ssl, urllib.request, collections
+
+    NTFY = os.environ.get("NTFY_URL", "http://nfty.nfty.svc.cluster.local/cluster-updates")
+    SA = "/var/run/secrets/kubernetes.io/serviceaccount"
+    SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+    def k8s(path):
+        token = open(f"{SA}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{SA}/ca.crt")
+        req = urllib.request.Request(
+            f"https://kubernetes.default.svc{path}",
+            headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
+            return json.load(r)
+
+    def running_images():
+        seen = {}
+        for kind in ("deployments", "statefulsets", "daemonsets"):
+            for item in k8s(f"/apis/apps/v1/{kind}").get("items", []):
+                ns = item["metadata"]["namespace"]
+                name = item["metadata"]["name"]
+                for c in item["spec"]["template"]["spec"].get("containers", []):
+                    seen.setdefault(c["image"], []).append(f"{ns}/{name}")
+        return seen
+
+    def hub_latest(repo):
+        url = (f"https://hub.docker.com/v2/repositories/{repo}"
+               "/tags/?page_size=100&ordering=last_updated")
+        try:
+            with urllib.request.urlopen(url, timeout=25) as r:
+                data = json.load(r)
+        except Exception:
+            return None
+        best = None
+        for t in data.get("results", []):
+            m = SEMVER.match(t.get("name", ""))
+            if m:
+                v = tuple(int(x) for x in m.groups())
+                if best is None or v > best[0]:
+                    best = (v, t["name"])
+        return best[1] if best else None
+
+    def norm(image):
+        # only Docker Hub images are checkable via this API
+        ref = image.split("@")[0]
+        if ":" in ref.rsplit("/", 1)[-1]:
+            path, tag = ref.rsplit(":", 1)
+        else:
+            path, tag = ref, "latest"
+        path = path.replace("docker.io/", "")
+        if any(path.startswith(p) for p in ("quay.io/", "registry.k8s.io/", "ghcr.io/", "gcr.io/")):
+            return None
+        if "/" not in path:
+            path = "library/" + path
+        return path, tag
+
+    outdated, unpinned = [], []
+    for image, owners in sorted(running_images().items()):
+        n = norm(image)
+        if not n:
+            continue
+        repo, tag = n
+        if tag in ("latest", ""):
+            unpinned.append(f"{repo} ({owners[0]})")
+            continue
+        if not SEMVER.match(tag):
+            continue
+        latest = hub_latest(repo)
+        if latest and SEMVER.match(latest):
+            cur = tuple(int(x) for x in SEMVER.match(tag).groups())
+            new = tuple(int(x) for x in SEMVER.match(latest).groups())
+            if new > cur:
+                outdated.append(f"{repo}: {tag} -> {latest}  [{owners[0]}]")
+
+    lines = []
+    if outdated:
+        lines.append(f"Outdated images ({len(outdated)}):")
+        lines += ["  " + o for o in outdated]
+    else:
+        lines.append("All pinned Docker Hub images are current.")
+    if unpinned:
+        lines.append(f"\nUnpinned (:latest) - consider pinning ({len(unpinned)}):")
+        lines += ["  " + u for u in unpinned[:15]]
+    lines.append("\nApply by hand - see TODO.md. Do not auto-apply.")
+    body = "\n".join(lines)
+    print(body)
+
+    try:
+        req = urllib.request.Request(NTFY, data=body.encode(),
+                                    headers={"Title": "Cluster image updates",
+                                             "Priority": "low", "Tags": "package"})
+        urllib.request.urlopen(req, timeout=20).read()
+        print("\n[posted to ntfy]")
+    except Exception as e:
+        print(f"\n[ntfy post failed: {e}]")
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: upgrade-check
+  namespace: system-upgrade
+spec:
+  schedule: "0 9 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: upgrade-check
+          containers:
+            - name: check
+              image: python:3.12-slim
+              command: ["python3", "/script/check.py"]
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+          volumes:
+            - name: script
+              configMap:
+                name: upgrade-check-script

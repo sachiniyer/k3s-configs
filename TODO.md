@@ -86,6 +86,33 @@ Then, cluster maintenance:
 - [ ] 🟠 **milstead (77%) and coffeeproject (73%) root disks filling up** — run the same cleanup
   (apt clean, autoremove old kernels, journal vacuum, `k3s crictl rmi --prune`). `/var/lib/rancher` is ~62G/node.
 
+## Upgrade results — 2026-08-10 session 2
+
+**Done + verified:**
+- ✅ **Vaultwarden 1.35.7 → 1.37.2.** Also fixed a latent bug: the RWO PVC deadlocks the default
+  RollingUpdate; deployment now uses `Recreate` (documented in `bitwarden/values.yaml`).
+- ✅ **Restore test PASSED end-to-end** (throwaway ns): `integrity_check ok`, 311 ciphers / 1 user,
+  and a real vaultwarden pod booted on the restored data and served `/alive` + `/api/config` = 200.
+  Note: the backup IAM key is **write-only** (no `GetObject`) — restores need operator creds.
+- ✅ **cert-manager v1.12.3 → v1.21.1** (CRDs applied separately since `installCRDs: false`).
+  Issuance re-verified: staging DNS-01 cert went `pending → valid → Ready` in 100s.
+  Fixed drift: live `letsencrypt-stage-dns` was missing `accessKeyIDSecretRef` (repo had it).
+- ✅ **headscale v0.20.0 → v0.29.3** — see `headscale/README.md` for the sequential path + 2 traps.
+- ✅ **journald capped** (`SystemMaxUse=200M`) on all 5 nodes + tunnel. Freed a lot: devocion 64%→20%,
+  tunnel journal 1.5G→168M. This permanently removes the Ceph-mon low-space cause. **Ceph now HEALTH_OK.**
+- ✅ **Node fixes:** milstead sleep/suspend/hibernate masked + logind ignores lid/idle; herkimer freed
+  ~14G; devocion freed space (was the real `mon x` node, not herkimer); sey got `reboot=cold` +
+  bounded GRUB recordfail (**unproven until next reboot — real fix is the BIOS boot-order change**).
+- ✅ **ntfy v2.5.0 → v2.28.0**, **privatebin 1.5.1 → 2.0.6**.
+
+**Failed / needs individual attention:**
+- [ ] 🟠 **filebrowser v2.23.0 → v2.63.23 FAILED** — pod runs but never becomes Ready; auto-reverted to
+      v2.23.0 (working). That jump has breaking config/db changes; upgrade it deliberately.
+
+**Lesson:** do NOT auto-apply app upgrades. In one batch: one needed a strategy change (Vaultwarden),
+one broke outright (filebrowser), one major bump was fine (privatebin). Detection should be automated;
+application should stay manual.
+
 ## Software inventory & upgrade tracking (2026-08-10)
 
 **No `helm` binary exists on the cluster** — releases were installed from an external CLI; state is in
@@ -348,3 +375,35 @@ non-HA instance — so it's both the SPOF and the thing we're cautious about res
 - **Secrets:** per-dir `pass.gpg` (encrypted, committed); plaintext `pass`/`.env` gitignored. Keep as-is.
 - **Storage:** Rook-Ceph (RBD + CephFS), 23 PVCs all Bound, no orphans. Currently degraded (OSD-2 down).
 - **No CronJobs** exist — no automated backups despite a `backup` namespace; worth revisiting.
+
+## Autoupgrade posture (set up 2026-08-10)
+
+- **OS security patches:** `unattended-upgrades` on all 5 nodes + tunnel (auto, no reboot).
+- **k3s:** `system-upgrade-controller` (channel `stable`). SUC itself is stale: **v0.13.4 → v0.20.1**.
+- **Container images / charts:** **detection is automated, application is manual** — CronJob
+  `upgrade-check` (`system-upgrade` ns, Mondays 09:00, `upgrade-check/cronjob.yaml`) compares running
+  Docker Hub image tags to latest and posts a report to **ntfy topic `cluster-updates`**.
+  Rationale: in one batch on 2026-08-10, one upgrade needed a strategy change, one broke outright,
+  one major bump was clean — auto-applying would have caused an outage.
+
+### Outdated images found by the first run (2026-08-10)
+- [ ] 🔴 **rook/ceph v1.10.10 → v1.20.6** — storage operator, very stale. Plan carefully (Ceph major jumps
+      need the documented rook upgrade path; do NOT jump blind).
+- [ ] 🟠 **system-upgrade-controller v0.13.4 → v0.20.1**
+- [ ] 🟠 **kutt v2.7.4 → v3.2.6** (major; has Postgres + Redis — expect a DB migration)
+- [ ] 🟠 prom/pushgateway v1.5.1 → v1.11.3; jimmidyson/configmap-reload v0.8.0 → v0.9.0
+- [ ] 🟢 rancher/mirrored-library-traefik 3.7.8 → 3.7.12, mirrored-coredns 1.14.6 → 1.14.7 (k3s-managed)
+- [ ] 🟠 filebrowser v2.23.0 → v2.63.23 (failed once, auto-reverted — needs deliberate upgrade)
+- [ ] 🟢 Pin the 13 `:latest` images (mostly own builds: git-sync, hugo-server, status, pong-wasm,
+      meal-finder-*, resow-back, school-demo, sembox-db, mnist-wasm-api, invoice-front; plus
+      `library/nginx` and `library/mongo`).
+
+### Still not upgraded (deliberate — stateful / higher risk)
+- [ ] metallb v0.13.7, prometheus-operator v0.60.1, prometheus stack 19.7.2,
+      matomo 4.15.1 (→5.x, MariaDB migration), resow mongodb 6.0.7.
+
+## Security follow-up
+- [ ] 🔴 **Rotate the Route53 IAM key** used by cert-manager DNS-01
+      (`prod-route53-credentials-secret`, `cert-manager` ns). Its value was printed into an assistant
+      session transcript on 2026-08-10 during debugging. Create a new access key, update the secret,
+      verify issuance, then delete the old key.
