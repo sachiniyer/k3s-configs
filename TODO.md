@@ -25,7 +25,16 @@ all 5 nodes Ready, zero unhealthy pods, Ceph HEALTH_OK, 0 failing certs, all pub
 - **Don't edit volumeMounts with index-based JSON patches** — use `$patch: replace` or re-apply the repo
   manifest. An index patch deleted the wrong mount and caused a second outage.
 - **Check a manifest declares `namespace:` before `kubectl apply`** (blog/deployment.yaml didn't → created
-  a stray deployment in `default`).
+  a stray deployment in `default`). **This is widespread, not a one-off**: on 2026-09-01 a dry-run showed
+  most Deployment/Service/Ingress/Middleware objects in `crabfit`, `invoice`, `meal-finder` and `sembox`
+  omitted it, so an apply would have created *duplicates in `default`* rather than updating the real
+  workloads. Those 8 files are fixed; **other dirs are probably still affected — audit before applying.**
+- **`kubectl apply --dry-run=server` and read the verb**: `created` for something that already exists
+  live is the tell-tale sign of a missing `namespace:`. `configured`/`unchanged` is what you want.
+- **A blank `value:` in a repo manifest wipes the live value on apply.** Grep `^ *value: *$` first.
+- **Secret env vars now come from SSM via External Secrets** — see `external-secrets/README.md`.
+  A `secretKeyRef` to a key that doesn't exist applies cleanly and *then* fails the pod with
+  `CreateContainerConfigError`. Diff referenced keys against the live Secret before applying.
 - **sey must be cold power-cycled, not warm-rebooted** (USB-SATA adapter wedges POST). Reproducible.
 - `helm` is now installed at `/usr/local/bin/helm` on herkimer (use `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`).
 - headscale CLI works from any dir now (absolute paths), but still needs root.
@@ -63,7 +72,27 @@ all 5 nodes Ready, zero unhealthy pods, Ceph HEALTH_OK, 0 failing certs, all pub
 - [ ] 🟢 Optional big win: drop Kubernetes histogram buckets to cut ~1/3 of prometheus series
       (`apiserver_request_duration_seconds_bucket` etc. — see the prometheus section).
 
+### 🔐 Secrets / env injection (mostly done 2026-09-01 — see `external-secrets/README.md`)
+- [ ] **`kutt/JWT_SECRET`** is the last literal secret in a live spec. It's already in SSM and its
+      ExternalSecret syncs; the fix is `helm upgrade` with `existingSecret` (values.yaml ~line 153).
+      **Blocked** by the `bitnamilegacy` item above — a helm upgrade today breaks kutt's images.
+- [ ] **Audit the remaining namespaces for missing `namespace:` declarations** (see hazard above).
+      Only the 8 converted files were fixed.
+- [ ] 🟢 Test an actual SSM restore from the S3 snapshot into a throwaway path (procedure is written
+      in `BACKUPS.md` but has not been executed).
+- [ ] 🟢 `MIN_EXPECTED=20` in `external-secrets/ssm-backup-cronjob.yaml` is the truncation guard;
+      raise it as more parameters are added (currently 26).
+- [ ] 🟢 The `*/pass.gpg` files are the superseded mechanism but are **deliberately retained** —
+      they're encrypted, and `bitwarden`/`matomo`/`certs`/`prometheus` were never migrated to SSM.
+      Only remove them per-namespace once that namespace is confirmed fully migrated.
+
 ### 🟠 Cleanups / smaller work
+- [ ] 🔴 **`resow-front` is running a webpack *dev* server in production** and has restarted
+      **2439 times** (exit 255, crashes inside `webpack-dev-middleware`). It serves 200s between
+      crashes so it's been invisible. Needs a real production build + a readiness probe.
+- [ ] **`sembox-back` re-downloads ~1.2 GB of models on every start** and has **no readiness probe**,
+      so k8s reports it 1/1 while it is not yet serving → ~6.5 min of 502s after any restart.
+      Add a readiness probe and cache the HF models on its existing PVC (`HF_HOME`).
 - [ ] Remove the leftover **`ca-certs` hostPath mount** on `mysite-deployment`'s git-sync (debugging
       residue; harmless but drift). Use `$patch: replace` or delete+re-apply — not an index patch.
 - [ ] **Migrate to `sachiniyer/git-sync-webhooks`** (webhooks instead of 10s polling) across the 6
@@ -75,6 +104,16 @@ all 5 nodes Ready, zero unhealthy pods, Ceph HEALTH_OK, 0 failing certs, all pub
 - [ ] **hermes** personal-assistant agent — deferred; you define scope first (see its section).
 
 ### ✅ Recently completed (don't redo)
+**Env injection redesign (2026-09-01):** app secrets moved to **AWS SSM Parameter Store** (26 params,
+SecureString, natively versioned) + **External Secrets Operator v2.10.0** (`external-secrets.io/v1`
+only). 26 env vars across crabfit/invoice/meal-finder/sembox/resow converted to `secretKeyRef` and
+applied — every value hash-compared against the live literal first, so no app behaviour changed.
+`resow/back.yaml` was reconstructed from the live spec (it had been entirely commented out).
+Weekly `ssm-backup` CronJob snapshots `/cluster/*` to `s3://…/ssm/` (365d) using a **write-only**
+IAM user (no `s3:GetObject`, no `ssm:PutParameter`). Caught in the process: stale
+`traefik.containo.us` API group, a `mongo:latest` regression over the pinned 8.3.8, and three live
+model IDs the repo would have downgraded. Docs: `external-secrets/README.md`, `BACKUPS.md`.
+
 All machines rebooted + kernels patched; unattended-upgrades + journald caps fleet-wide; tunnel boot-DNS
 hardened; **headscale 0.20.0 → 0.29.3**; **cert-manager 1.12.3 → 1.21.1** (issuance verified);
 **Vaultwarden 1.35.7 → 1.37.2** + **restore test passed end-to-end**; prometheus **v3.14.0** with a durable
