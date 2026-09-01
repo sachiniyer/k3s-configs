@@ -31,7 +31,6 @@ in the `bitwarden` ns (for the CronJob), one in `/root/.aws/credentials` on the 
   Kernel updates still need a manual reboot window.
 - **k3s:** already automated via `system-upgrade-controller` (channel `stable`). TODO: pin to a
   version for predictable, reviewed upgrades.
-- **Helm charts / image tags:** `renovate.json` opens weekly PRs (review-gated). Major bumps are
-  never auto-merged (breaking changes / CRD migrations). **Manual step to activate: install the
-  Renovate GitHub App on `sachiniyer/k3s-configs`.**
+- **Helm charts / image tags:** upgraded manually (Renovate was evaluated and skipped). Track versions in
+  `TODO.md` "Software inventory & upgrade tracking"; upgrade oldest-first, test after each.
 - Do NOT blind-auto-apply Helm major upgrades or stateful DB app upgrades — review + test each.

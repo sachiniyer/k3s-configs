@@ -50,6 +50,74 @@ Then, cluster maintenance:
   reboots-to-activate-new-kernel are held.
   - Tunnel → EC2 **stop/start** (EIP `eipalloc-09ae41047a0cdd18b` confirmed → IP preserved; ~2-3 min full-site downtime).
   - devocion (hosts osd.1) + milstead → rolling `drain`→reboot→`uncordon`, ONE at a time, only when Ceph is HEALTH_OK.
+
+---
+
+## 2026-08-10 session — all machines rebooted, DNS/DERP hardening, full inventory
+
+**Done:**
+- ✅ Rolling-rebooted all 5 nodes for staged kernel updates (Ceph-gated, one at a time). All `Ready`,
+  `v1.36.4+k3s1`; kernels Debian-11 nodes `5.10.0-46`, sey (Debian 12) `6.1.0-52`. osd.0/1/2 all re-activated; Ceph `3 up / 169 active+clean`.
+- ✅ Rebooted the tunnel (kernel `6.8.0-1063-aws`).
+- ✅ **Recovered a full-site outage that the tunnel reboot triggered**, and **hardened boot DNS** so it can't recur:
+  static `/etc/resolv.conf` (1.1.1.1/8.8.8.8), `tailscale set --accept-dns=false` on the tunnel, and `/etc/hosts`
+  entries for `tunnel.sachiniyer.com` + all node names. GRUB `recordfail` bound added on herkimer.
+  Backups left: `/etc/hosts.bak-2026-08`, `/etc/default/grub.bak-2026-08`, headscale `config.yaml.bak-2026-07-15`.
+
+  **Root cause (fixed):** on boot `/etc/resolv.conf` pointed only at Tailscale MagicDNS (`100.100.100.100`, dead
+  until tailscaled connects) → tailscaled couldn't resolve its control server, **headscale couldn't fetch its
+  external DERP map (retries only every 24h) → zero relays for every client** ("could not connect to any relay
+  server"), and nginx couldn't resolve node upstreams → nginx failed to start. Whole site down.
+
+**Node-specific issues:**
+- [ ] 🔴 **sey hangs at every warm reboot** (needs a physical/cold power-cycle). Root cause (investigated): the
+  external **USB-SATA adapter (Ugreen / ASMedia ASM1153)** wedges firmware USB enumeration on a *warm* reboot;
+  a cold power-cycle resets the bridge. Legacy BIOS. Fixes, ranked: (A) BIOS → boot only from the internal SSD,
+  disable USB boot/legacy USB; (B) quiesce/power-off the USB bridge in a pre-shutdown systemd unit after the OSD
+  stops; (C) always `poweroff`+power-on instead of warm reboot; (D) try `reboot=cold` in GRUB cmdline.
+- [ ] 🟠 **milstead is a laptop that SLEEPS** → goes `NotReady`/off-LAN until woken. Disable suspend:
+  `systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target` + logind `HandleLidSwitch=ignore`.
+- [ ] 🟠 nginx on the tunnel doesn't auto-start cleanly if node names don't resolve — mitigated by `/etc/hosts`;
+  consider a systemd drop-in ordering nginx `After=tailscaled` + resolver.
+
+## Software inventory & upgrade tracking (2026-08-10)
+
+**No `helm` binary exists on the cluster** — releases were installed from an external CLI; state is in
+`sh.helm.release.*` secrets. To upgrade charts: install helm, add repos, use each dir's `values.yaml`,
+upgrade **oldest-first, test after each**. Do NOT blind-bulk-upgrade stateful apps.
+
+### Edge (tunnel, Ubuntu 22.04.5)
+- [ ] **headscale `v0.20.0`** → very old (current ~0.26). Operator OK'd. ⚠️ breaking DB/config migrations at
+  0.23/0.24; back up `db.sqlite` first (daily backup exists). Attended. Consider embedded DERP while at it.
+- [ ] nginx `1.22.1` (apt) — security-patched via unattended-upgrades; optional distro bump.
+- ✅ OS/kernel patched + rebooted.
+
+### Cluster infra (Helm — all ~2023, stale)
+- [ ] **cert-manager `v1.12.3`** → ~1.16/1.17 (do FIRST; all certs currently issue). Stepwise, test issuance.
+- [ ] metallb `v0.13.7` → ~0.14
+- [ ] prometheus-operator `v0.60.1`; prometheus stack (prometheus `v2.41.0`, alertmanager `v0.25.0`,
+  node-exporter `v1.5.0`, kube-state-metrics `v2.8.0`, pushgateway `v1.5.1`)
+- [ ] system-upgrade-controller `v0.13.4`
+- ✅ k3s `v1.36.4+k3s1` current (SUC-managed)
+
+### Third-party apps (Helm/pinned — stale)
+- [ ] **vaultwarden/server `1.35.7` — OPERATOR PRIORITY.** Verify latest + upgrade (backup exists; snapshot right before).
+- [ ] kutt `v2.7.4` (+ postgresql `15.4.0`, redis `7.2.0`)
+- [ ] matomo `4.15.0` (+ mariadb `11.0.3`) — ⚠️ 4→5 has DB migration
+- [ ] ntfy `v2.5.0` → ~2.11
+- [ ] privatebin `1.5.1` → ~1.7
+- [ ] filebrowser `v2.23.0` → ~2.31
+- [ ] resow mongodb `6.0.7`
+- [ ] pin `minecraft:latest`, meal-finder `mongo:latest`
+
+### Own apps (`sachiyer/*`) — upgraded by rebuilding/pushing images, not chart bumps
+- [ ] Many on `:latest` or old pins (blog, digits, emptypad, invoice-front, meal-finder-back, schwinn, status,
+  tweets, website, wiki via `git-sync:latest`+`nginx`). Recommend pinning tags for reproducibility.
+
+### Carry-over
+- [ ] Test a real Vaultwarden restore end-to-end. Phase 2 manifest export (rook-ceph/metallb/prometheus-operator).
+  herkimer Ceph-mon low disk space. OSD-down→ntfy alert. Move osd.2 off USB-SATA. Decide `cnpg-system`/`dns` ns.
+  **Renovate: SKIPPED per operator — remove `renovate.json`.**
 - ⏸️ **Helm major upgrades (Phase 4, incl. cert-manager).** All certs currently issue fine; a botched
   cert-manager upgrade breaks renewals silently. Do via reviewed Renovate PRs, attended.
 - ⏸️ **Phase 2 full manifest export** of the keep-list infra namespaces into repo dirs.
