@@ -490,3 +490,39 @@ The `upgrade-check` CronJob no longer posts anywhere — it is **log-only**:
 - [ ] 🟠 **Pick a notification channel** for cluster alerts (upgrade reports, OSD-down, PVC-full).
       Candidates: email/SMTP, hosted ntfy.sh with a secret topic, Slack/Discord webhook, Pushover.
       Whatever is chosen, wire it into `upgrade-check/cronjob.yaml` and the Ceph/PVC alerts.
+
+### ⚠️ Correction: system-upgrade-controller upgrade FAILED (reverted)
+I reported v0.13.4 → v0.20.1 as OK because it passed rollout, but it then **CrashLoopBackOff'd**
+(25 restarts). Cause: newer SUC **self-installs its own CRD**, and the ServiceAccount RBAC from the
+v0.13.4-era install lacks `customresourcedefinitions` (list/create) at cluster scope:
+`failed to create crd 'plans.upgrade.cattle.io': ... is forbidden`.
+**Reverted to v0.13.4 (1/1 Running).**
+- [ ] 🟠 To upgrade properly, apply the upstream manifest for the target version (it ships the correct
+      RBAC + CRD) rather than bumping only the image:
+      `kubectl apply -f https://github.com/rancher/system-upgrade-controller/releases/download/vX.Y.Z/system-upgrade-controller.yaml`
+      **Lesson: image-only bumps break controllers whose RBAC/CRD requirements changed.**
+
+## Removal candidates — evidence gathered 2026-09-01
+
+**Provably doing nothing — safe to delete:**
+- [ ] 🟠 **metallb** — **no `IPAddressPool` and no `L2Advertisement` CRs exist**, so it cannot assign any
+      IP. The only LoadBalancer svc is `kube-system/traefik`, whose external IPs are all 5 node IPs =
+      k3s klipper servicelb. minecraft was its only real consumer and is gone. Deleting it also removes
+      the "metallb needs a proper CRD-aware upgrade" TODO.
+- [ ] 🟠 **prometheus-operator** — manages **0 Prometheus, 0 ServiceMonitor, 0 PodMonitor,
+      0 Alertmanager, 0 PrometheusRule** CRs. Monitoring is the standalone `prometheus` chart.
+      It is pure overhead. (Ironically I upgraded it to v0.93.1 for nothing.)
+- [ ] 🟠 **cnpg-system** — CloudNativePG operator with **0 `Cluster` CRs** and nothing running.
+- [ ] 🟠 **dns** namespace — no workloads (1 configmap/secret).
+- [ ] 🟠 **tc-system** namespace — empty.
+
+**Worth removing because it also deletes a risky upgrade:**
+- [ ] 🟠 **matomo** (web analytics) — data is small: app 103M, MariaDB 236M. Removing it eliminates the
+      matomo **4.15 → 5.x MariaDB schema migration**, the single riskiest remaining upgrade.
+      Keep only if you actually read the analytics.
+- [ ] 🟠 **kutt** (link shortener, `s.sachiniyer.com`) — Postgres is only **47M**. Removing eliminates the
+      **v2.7.4 → v3.2.6** major upgrade + Postgres migration. Keep only if short links are in use.
+- [ ] 🟢 **filebrowser** — its upgrade already failed once and it holds a 64Gi rootdir PVC. Confirm it's used.
+
+**Operator's judgment (own projects / old demos — cannot assess usage from here):**
+`school-demo`, `tweets`, `digits` (mnist demo), `pong-wasm`, `crabfit`, `emptypad`, `sembox`, `resow`.
