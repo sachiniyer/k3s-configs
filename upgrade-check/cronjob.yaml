@@ -43,7 +43,6 @@ data:
   check.py: |
     import json, os, re, ssl, urllib.request, collections
 
-    NTFY = os.environ.get("NTFY_URL", "http://nfty.nfty.svc.cluster.local/cluster-updates")
     SA = "/var/run/secrets/kubernetes.io/serviceaccount"
     SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
@@ -128,14 +127,10 @@ data:
     body = "\n".join(lines)
     print(body)
 
-    try:
-        req = urllib.request.Request(NTFY, data=body.encode(),
-                                    headers={"Title": "Cluster image updates",
-                                             "Priority": "low", "Tags": "package"})
-        urllib.request.urlopen(req, timeout=20).read()
-        print("\n[posted to ntfy]")
-    except Exception as e:
-        print(f"\n[ntfy post failed: {e}]")
+    # NOTE: ntfy was removed 2026-09-01 (operator won't use it), so this job is
+    # log-only for now: read it with
+    #   kubectl -n system-upgrade logs job/<latest upgrade-check job>
+    # A real notification channel is an open TODO. If one is added, POST `body` to it here.
 ---
 apiVersion: batch/v1
 kind: CronJob

@@ -458,3 +458,35 @@ Only mesh-connected devices can subscribe. Also **ntfy auth is disabled** (`conf
 so exposing it publicly as-is would let anyone read/publish your topics.
 - [ ] Decide: (a) add `nfty` to nginx.conf **and enable ntfy auth**, (b) keep mesh-only and connect a
       device to the mesh, or (c) use hosted ntfy.sh with a secret topic.
+
+## 2026-09-01 — prometheus properly solved + ntfy removed
+
+### ✅ prometheus: real root cause + durable fix
+Root cause was NOT the WAL (that was the symptom): **~205,000 active series x 15d retention x 15s
+scrape ≈ 30GB compressed = exactly the 30Gi volume size.** The disk filled legitimately, prometheus
+could then no longer cut/compact blocks, `/data/wal` grew to 25.6G, and it could not start at all.
+Monitoring had been silently dead. Memory was never the issue (~792Mi used, node has 31Gi).
+
+The release had been running on **pure chart defaults** (`helm get values` → `null`), and the earlier
+`retention.size` fix was only a `kubectl patch` — any `helm upgrade` would have wiped it AND
+downgraded prometheus back to v2.41.0. Now encoded in **`prometheus/values.yaml`** and applied via
+helm (revision 2), so it is chart-managed and survives upgrades:
+- `server.retention: 7d` (was 15d)
+- `server.extraFlags: storage.tsdb.retention.size=18GB` — hard size cap (chart 19.7.2 has no `retentionSize` value)
+- `server.image.tag: v3.14.0` pinned so helm can't downgrade it
+- resource *requests* only — deliberately **no memory limit**, since an OOMKill loop is exactly what
+  would stop compaction and let the WAL run away again
+Prometheus confirms: `TSDB retention updated duration=1w size=18GiB`, "Server is ready". Disk at 5%.
+
+- [ ] 🟢 Optional big win: cut ~1/3 of all series by dropping Kubernetes histogram buckets via
+      `metric_relabel_configs` (`apiserver_request_duration_seconds_bucket` ~29.5k,
+      `apiserver_request_sli_duration_seconds_bucket` ~20.2k, `etcd_request_duration_seconds_bucket` ~18.2k).
+- [ ] 🟠 Add a PVC-nearly-full alert so a full volume can never silently wedge a service again.
+
+### ✅ ntfy removed
+Operator won't use it. Removed the `nfty` Helm release, namespace (PVC/cert/ingress) and `nfty/` repo dir.
+The `upgrade-check` CronJob no longer posts anywhere — it is **log-only**:
+`kubectl -n system-upgrade logs job/<latest upgrade-check job>`.
+- [ ] 🟠 **Pick a notification channel** for cluster alerts (upgrade reports, OSD-down, PVC-full).
+      Candidates: email/SMTP, hosted ntfy.sh with a secret topic, Slack/Discord webhook, Pushover.
+      Whatever is chosen, wire it into `upgrade-check/cronjob.yaml` and the Ceph/PVC alerts.

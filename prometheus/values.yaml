@@ -1,0 +1,46 @@
+# Prometheus chart values (prometheus-community/prometheus, chart 19.7.2).
+#
+# WHY THIS FILE EXISTS (added 2026-09-01):
+# This release previously ran on PURE CHART DEFAULTS -- `helm get values prometheus` returned
+# `null`. That is how it silently wedged itself:
+#   ~205,000 active series x 15d retention x 15s scrape  ~=  30GB compressed
+# ...which is exactly the size of its 30Gi volume. The disk filled, prometheus could no longer
+# cut/compact blocks, so `/data/wal` grew to 25.6G, and then it could not start at all
+# ("write /data/queries.active: no space left on device"). The WAL was the symptom; retention
+# vs. volume size was the cause. Monitoring was silently dead.
+#
+# Top cardinality offenders (from /api/v1/status/tsdb) are Kubernetes histogram buckets:
+#   apiserver_request_duration_seconds_bucket      ~29.5k series
+#   apiserver_request_sli_duration_seconds_bucket  ~20.2k series
+#   etcd_request_duration_seconds_bucket           ~18.2k series
+# Dropping those via metric_relabel_configs would cut ~1/3 of all series -- see TODO.md.
+
+server:
+  image:
+    repository: quay.io/prometheus/prometheus
+    # Pinned: upgraded 2026-09-01 from the chart default (v2.41.0). Without this,
+    # any `helm upgrade` silently downgrades prometheus back to v2.
+    tag: "v3.14.0"
+
+  # Time-based retention halved (was the 15d chart default).
+  retention: "7d"
+
+  extraFlags:
+    - web.enable-lifecycle
+    # THE guard rail: a hard cap on on-disk size, so even a cardinality spike cannot
+    # fill the volume and re-create the WAL wedge. Chart 19.7.2 has no `retentionSize`
+    # value, so it has to go through extraFlags.
+    - storage.tsdb.retention.size=18GB
+
+  persistentVolume:
+    # Matches the existing PVC. Helm will not shrink a PVC, but keeping this accurate
+    # stops a future upgrade from trying to create a smaller one.
+    size: 30Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    # Deliberately NO memory limit: at ~205k series prometheus sits around 0.8-3Gi, and an
+    # OOMKill restart loop is precisely what would prevent block compaction and let the WAL
+    # run away again. The node has 31Gi. Revisit only with headroom to spare.
