@@ -2,8 +2,15 @@ replicaCount: 1
 
 image:
   repository: vaultwarden/server
-  tag: "1.35.7"
+  tag: "1.37.2"
   pullPolicy: IfNotPresent
+
+# NOTE: the data PVC is ReadWriteOnce, so the Deployment MUST use strategy `Recreate`.
+# With the default RollingUpdate, the new pod is scheduled before the old one releases the
+# volume and gets stuck in ContainerCreating (RWO can't attach to two nodes). Applied live via:
+#   kubectl -n bitwarden patch deploy bitwarden-bitwarden-k8s \
+#     -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+# Re-apply this after any helm upgrade that resets the strategy.
 
 env:
   SIGNUPS_ALLOWED: false
