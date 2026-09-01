@@ -79,6 +79,12 @@ Then, cluster maintenance:
   `systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target` + logind `HandleLidSwitch=ignore`.
 - [ ] 🟠 nginx on the tunnel doesn't auto-start cleanly if node names don't resolve — mitigated by `/etc/hosts`;
   consider a systemd drop-in ordering nginx `After=tailscaled` + resolver.
+- [ ] 🟠 **Cap journald size on every machine.** `/var/log` journals grow unbounded (~4G/node observed on
+  herkimer + devocion, which pushed devocion under Ceph's 30%-free mon threshold). Add
+  `/etc/systemd/journald.conf.d/99-size-cap.conf` with `SystemMaxUse=200M` + `RuntimeMaxUse=50M`,
+  restart `systemd-journald`, and vacuum once. Applies to all 5 nodes + the tunnel.
+- [ ] 🟠 **milstead (77%) and coffeeproject (73%) root disks filling up** — run the same cleanup
+  (apt clean, autoremove old kernels, journal vacuum, `k3s crictl rmi --prune`). `/var/lib/rancher` is ~62G/node.
 
 ## Software inventory & upgrade tracking (2026-08-10)
 
