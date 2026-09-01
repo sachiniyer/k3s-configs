@@ -16,10 +16,13 @@ on the tunnel (the timer). **Neither key is in git.**
 |---|---|---|---|
 | `vaultwarden/<date>/` | Vaultwarden `/data`: `db.sqlite3` (+ `-wal`/`-shm`), `attachments/`, `rsa_key*.pem`, `sends/` | CronJob `vaultwarden-backup` (`bitwarden` ns, daily 04:17) — `bitwarden/backup-cronjob.yaml` | **30 days** |
 | `headscale/headscale-<date>.tgz` | headscale `db.sqlite` + `config.yaml` + node keys | systemd `headscale-backup.timer` (tunnel, daily 04:30) — `/usr/local/bin/headscale-backup.sh` | **30 days** |
+| `ssm/cluster-ssm-<ts>.json` | Full snapshot of every `/cluster/*` SSM parameter (all app secrets), incl. `Name`/`Type`/`Value`/`Version` | CronJob `ssm-backup` (`external-secrets` ns, Sundays 05:00) — `external-secrets/ssm-backup-cronjob.yaml` | **365 days** |
 | `archive/<name>/…` | One-off archives of decommissioned data | manual | **permanent** (no lifecycle rule) |
 
-Lifecycle rules (verified 2026-08-10): `vaultwarden/` → 30d, `headscale/` → 30d. `archive/` is covered
-by **no** rule, so it is kept indefinitely.
+Lifecycle rules (verified 2026-09-01): `vaultwarden/` → 30d, `headscale/` → 30d, `ssm/` → 365d.
+`archive/` is covered by **no** rule, so it is kept indefinitely. Config is versioned in
+`s3/lifecycle.json` — that file is the full desired state, so edit and re-`put` it rather than
+adding rules ad hoc (a `put` replaces *all* rules).
 
 Current archives:
 - `archive/minecraft/minecraft-world-2026-08-10.tgz` — 681M Minecraft world (server torn down 2026-08-10).
@@ -31,7 +34,31 @@ Current archives:
 - **headscale:** on the tunnel: `systemctl stop headscale`; `tar xzf headscale-<date>.tgz -C /etc/headscale`;
   `systemctl start headscale`.
 - **archive/minecraft:** redeploy minecraft, untar the world into its `/data` PVC before first start.
+- **Restoring SSM parameters** (see also `external-secrets/README.md`):
+
+  ```sh
+  umask 077
+  aws s3 cp s3://sachiniyer-cluster-backups/ssm/cluster-ssm-<ts>.json /tmp/d.json
+  # writes every parameter back as SecureString; values never touch the shell history
+  python3 - <<'EOF'
+  import json, subprocess
+  for p in json.load(open('/tmp/d.json'))['Parameters']:
+      subprocess.run(['aws','ssm','put-parameter','--cli-input-json',
+                      json.dumps({'Name':p['Name'],'Value':p['Value'],
+                                  'Type':'SecureString','Overwrite':True})], check=True)
+      print('restored', p['Name'])
+  EOF
+  shred -u /tmp/d.json
+  ```
+
+  Then force ESO to resync and restart the consumers:
+  `kubectl -n <ns> annotate externalsecret <ns>-secrets force-sync=$(date +%s) --overwrite`.
+
+  Note the backup job's own credential **cannot** perform this restore (it has no
+  `s3:GetObject` and no `ssm:PutParameter`, by design). Restore with an admin identity.
 - [ ] **Not yet tested end-to-end** — do a real Vaultwarden restore into a throwaway ns to validate.
+      The `ssm/` snapshot *has* been validated for parseability and completeness (26/26 parameters,
+      all `SecureString`, all non-empty) but an actual round-trip restore has not been performed.
 
 ### Convention for future teardowns
 Decommissioning a service with data worth keeping:

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sembox-db
+  namespace: sembox
 spec:
   selector:
     matchLabels:
@@ -19,18 +20,25 @@ spec:
               name: db-port
           env:
             - name: POSTGRES_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: sembox-secrets
+                  key: POSTGRES_PASSWORD
             - name: NEW_POSTGRES_USER
               value: sem
             - name: NEW_POSTGRES_DB
               value: semdb
             - name: NEW_POSTGRES_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: sembox-secrets
+                  key: NEW_POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: sembox-db
+  namespace: sembox
 spec:
   selector:
     app: sembox-db

@@ -13,6 +13,13 @@
       "Status": "Enabled",
       "Expiration": { "Days": 30 },
       "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "ssm-rotate-365d",
+      "Filter": { "Prefix": "ssm/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 365 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
     }
   ]
 }

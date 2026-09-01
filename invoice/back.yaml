@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: invoice-back
+  namespace: invoice
 spec:
   selector:
     matchLabels:
@@ -20,11 +21,20 @@ spec:
             - name: ORIGIN
               value: "https://invoice.sachiniyer.com"
             - name: SECRET_KEY
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: invoice-secrets
+                  key: SECRET_KEY
             - name: SALT
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: invoice-secrets
+                  key: SALT
             - name: JWT_KEY
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: invoice-secrets
+                  key: JWT_KEY
             - name: JWT_ALGO
               value: "HS512"
             - name: JWT_ISS
@@ -36,9 +46,15 @@ spec:
             - name: TEMP_FILE_LOCATION
               value: "files"
             - name: AWS_API_KEY
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: invoice-secrets
+                  key: AWS_API_KEY
             - name: AWS_API_SECRET
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: invoice-secrets
+                  key: AWS_API_SECRET
             - name: AWS_USER_TABLE_NAME
               value: "treya-users"
             - name: AWS_FILE_TABLE_NAME
@@ -48,7 +64,7 @@ spec:
             - name: AWS_S3_PROCESSED_NAME
               value: "invoice-categorization-processed"
             - name: AWS_ROLE_ARN
-              value:
+              value: "arn:aws:iam::351629464041:role/service-role/batch-role-new"
             - name: AWS_MODEL_ID
               value: "anthropic.claude-3-haiku-20240307-v1:0"
             - name: MODEL_DOWNLOAD_PATH
@@ -66,6 +82,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: invoice-back
+  namespace: invoice
 spec:
   selector:
     app: invoice-back
@@ -78,6 +95,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: cors
+  namespace: invoice
 spec:
   headers:
     accessControlAllowMethods:
@@ -109,6 +127,7 @@ kind: Ingress
 apiVersion: networking.k8s.io/v1
 metadata:
   name: invoice-back-ingress
+  namespace: invoice
 spec:
   tls:
     - secretName: invoice-back-cert

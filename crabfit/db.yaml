@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: crabfit-db
+  namespace: crabfit
 spec:
   selector:
     matchLabels:
@@ -18,18 +19,25 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: crabfit-secrets
+                  key: POSTGRES_PASSWORD
             - name: NEW_POSTGRES_USER
               value: crab
             - name: NEW_POSTGRES_DB
               value: crabfit
             - name: NEW_POSTGRES_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: crabfit-secrets
+                  key: NEW_POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: crabfit-db
+  namespace: crabfit
 spec:
   selector:
     app: crabfit-db

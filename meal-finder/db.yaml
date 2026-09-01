@@ -5,6 +5,9 @@ metadata:
   name: mongodb
   namespace: meal-finder
 spec:
+  # RWO PVC: rolling update deadlocks (new pod waits on the old pod's volume)
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mongodb
@@ -18,7 +21,7 @@ spec:
         kubernetes.io/hostname: herkimer
       containers:
         - name: mongodb
-          image: mongo:latest
+          image: mongo:8.3.8
           ports:
             - containerPort: 27017
           volumeMounts:
@@ -30,13 +33,19 @@ spec:
             - name: MONGO_INITDB_ROOT_USERNAME
               value: "admin"
             - name: MONGO_INITDB_ROOT_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: meal-finder-secrets
+                  key: MONGO_INITDB_ROOT_PASSWORD
             - name: MONGO_INITDB_DATABASE
               value: "assistant_db"
             - name: MONGODB_USER
               value: "assistant_user"
             - name: MONGODB_PASSWORD
-              value:
+              valueFrom:
+                secretKeyRef:
+                  name: meal-finder-secrets
+                  key: MONGODB_PASSWORD
       volumes:
         - name: mongodb-data
           persistentVolumeClaim:

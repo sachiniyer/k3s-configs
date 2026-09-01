@@ -1,86 +1,72 @@
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: resow-back
-# spec:
-#   selector:
-#     matchLabels:
-#       app: resow-back
-#   template:
-#     metadata:
-#       labels:
-#         app: resow-back
-#     spec:
-#       containers:
-#         - name: resow-back
-#           image: sachiyer/resow-back
-#           ports:
-#             - containerPort: 3000
-#           env:
-#             - name: DB_USER
-#               value:
-#             - name: DB_PWORD
-#               value:
-#             - name: DB_HOST
-#               value:
-#             - name: DB_PORT
-#               value:
-#             - name: DB_NAME
-#               value:
-#             - name: AWS_REGION
-#               value:
-#             - name: AWS_BUCKET_NAME
-#               value:
-#             - name: AWS_ACCESS_KEY
-#               value:
-#             - name: AWS_SECRET_ACCESS_KEY
-#               value:
-#             - name: JWT_SECRET
-#               value:
-#             - name: PORT
-#               value:
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: resow-back
-# spec:
-#   selector:
-#     app: resow-back
-#   ports:
-#     - protocol: TCP
-#       port: 80
-#       targetPort: 3000
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
+# resow backend. Secrets come from AWS SSM Parameter Store via
+# External Secrets Operator (see resow/externalsecret.yaml + external-secrets/).
+# Non-secret config stays inline so this file is the full source of truth.
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: resow-back-cert
+  name: resow-back
   namespace: resow
 spec:
-  commonName: resow-api.sachiniyer.com
-  secretName: resow-back-cert
-  dnsNames:
-    - resow-api.sachiniyer.com
-  issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resow-back
+  template:
+    metadata:
+      labels:
+        app: resow-back
+    spec:
+      containers:
+        - name: resow-back
+          image: sachiyer/resow-back
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DB_USER
+              value: "resow"
+            - name: DB_PWORD
+              valueFrom:
+                secretKeyRef:
+                  name: resow-secrets
+                  key: DB_PWORD
+            - name: DB_HOST
+              value: "mongo-mongodb.resow.svc.cluster.local"
+            - name: DB_PORT
+              value: "27017"
+            - name: DB_NAME
+              value: "resow"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_BUCKET_NAME
+              value: "resow-devops-final"
+            - name: AWS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: resow-secrets
+                  key: AWS_ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: resow-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: resow-secrets
+                  key: JWT_SECRET
+            - name: PORT
+              value: "3000"
 ---
-kind: Ingress
-apiVersion: networking.k8s.io/v1
+apiVersion: v1
+kind: Service
 metadata:
-  name: resow-back-ingress
+  name: resow-back
+  namespace: resow
 spec:
-  tls:
-    - secretName: resow-back-cert
-  rules:
-    - host: resow-api.sachiniyer.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: resow-back
-                port:
-                  number: 80
+  selector:
+    app: resow-back
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000

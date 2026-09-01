@@ -1,0 +1,103 @@
+# Disaster-recovery backup of the AWS SSM Parameter Store secrets.
+#
+# WHY THIS EXISTS
+#   SSM Parameter Store is the source of truth for every application secret and
+#   it keeps its own version history, so day-to-day "versioning" is already
+#   handled there (see external-secrets/README.md). What SSM does NOT protect
+#   against is the whole parameter tree being deleted or the account being lost.
+#   This job takes a weekly point-in-time snapshot of /cluster/* into S3 so the
+#   secrets never live in only one place.
+#
+# SECURITY PROPERTIES
+#   - Runs as IAM user `cluster-ssm-backup` (iam/policy-cluster-ssm-backup.json).
+#   - That user can read /cluster/* and s3:PutObject to the ssm/ prefix ONLY.
+#     It deliberately has NO s3:GetObject and NO ssm:PutParameter, so if this
+#     credential leaks it cannot read prior backups back out, and it cannot
+#     modify or destroy the live secrets.
+#   - The bucket has default SSE-AES256, versioning, and a public-access block
+#     (see s3/). Objects are written with an explicit --sse AES256 as well.
+#   - The job never echoes parameter values; it only ever prints counts.
+#
+# RESTORE: see BACKUPS.md ("Restoring SSM parameters").
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ssm-backup
+  namespace: external-secrets
+spec:
+  # Sundays 05:00 UTC — after the 04:17 vaultwarden and 04:30 headscale backups.
+  schedule: "0 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 604800
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ssm-backup
+              image: amazon/aws-cli:2.31.28
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssm-backup-aws
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssm-backup-aws
+                      key: secret-access-key
+                - name: BUCKET
+                  value: "sachiniyer-cluster-backups"
+                - name: SSM_PATH
+                  value: "/cluster"
+                # Refuse to upload if we see fewer than this many parameters.
+                # Guards against a partial/truncated dump being stored as if
+                # it were a good backup. Raise this as more secrets are added.
+                - name: MIN_EXPECTED
+                  value: "20"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  DUMP=/tmp/ssm-dump.json
+                  umask 077
+
+                  echo "dumping ${SSM_PATH} (values are never printed)"
+                  aws ssm get-parameters-by-path \
+                    --path "${SSM_PATH}" \
+                    --recursive \
+                    --with-decryption \
+                    --output json > "${DUMP}"
+
+                  COUNT=$(grep -o '"Name"' "${DUMP}" | wc -l | tr -d ' ')
+                  echo "parameters captured: ${COUNT}"
+
+                  if [ "${COUNT}" -lt "${MIN_EXPECTED}" ]; then
+                    echo "REFUSING TO UPLOAD: got ${COUNT}, expected >= ${MIN_EXPECTED}."
+                    echo "A truncated dump must not be stored as a good backup."
+                    rm -f "${DUMP}"
+                    exit 1
+                  fi
+
+                  KEY="ssm/cluster-ssm-$(date -u +%Y%m%dT%H%M%SZ).json"
+                  aws s3 cp "${DUMP}" "s3://${BUCKET}/${KEY}" \
+                    --sse AES256 \
+                    --only-show-errors
+
+                  echo "uploaded s3://${BUCKET}/${KEY} (${COUNT} parameters)"
+                  rm -f "${DUMP}"
+                  echo "done"
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
