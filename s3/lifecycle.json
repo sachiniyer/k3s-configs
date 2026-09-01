@@ -1,0 +1,18 @@
+{
+  "Rules": [
+    {
+      "ID": "vaultwarden-rotate-30d",
+      "Filter": { "Prefix": "vaultwarden/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 30 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "headscale-rotate-30d",
+      "Filter": { "Prefix": "headscale/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 30 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    }
+  ]
+}
