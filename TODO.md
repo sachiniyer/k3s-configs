@@ -8,6 +8,83 @@ Legend: 🔴 breaks a live service · 🟠 hygiene/drift · 🟢 nice-to-have/lo
 
 ---
 
+# ⭐ START HERE — open items as of 2026-09-01
+
+Everything below this section is a **chronological log** (useful for "why is it like this?"), but this
+is the current state of play. Cluster was verified fully healthy at the end of 2026-09-01:
+all 5 nodes Ready, zero unhealthy pods, Ceph HEALTH_OK, 0 failing certs, all public endpoints serving.
+
+### ⚠️ Read before touching anything
+- **Do NOT `helm upgrade` matomo, kutt, or resow (mongo)** until the item below is done — their images
+  were repointed to `bitnamilegacy/*` with `kubectl set image`, and a helm upgrade would revert them to
+  `bitnami/*` refs that **no longer exist** → instant ImagePullBackOff.
+- **Never `k3s crictl rmi --prune` on a node with long-lived containers.** Doing this caused the
+  2026-09-01 outage (removed layers a 569-day-old container still referenced).
+- **Any single-replica workload with an RWO PVC needs `strategy: Recreate`**, else rolling updates
+  deadlock (bit us on Vaultwarden, prometheus, matomo, mongo).
+- **Don't edit volumeMounts with index-based JSON patches** — use `$patch: replace` or re-apply the repo
+  manifest. An index patch deleted the wrong mount and caused a second outage.
+- **Check a manifest declares `namespace:` before `kubectl apply`** (blog/deployment.yaml didn't → created
+  a stray deployment in `default`).
+- **sey must be cold power-cycled, not warm-rebooted** (USB-SATA adapter wedges POST). Reproducible.
+- `helm` is now installed at `/usr/local/bin/helm` on herkimer (use `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`).
+- headscale CLI works from any dir now (absolute paths), but still needs root.
+
+### 🙋 Needs you (can't be done from the cluster)
+- [ ] 🔴 **Uncomment the Matomo tracker** in the **website source repo** (`packages/matomo.js` — every line
+      is `//`-commented). This is the real reason Matomo shows no visitors since 2024-12-23. Historical
+      data (1,383 visits) is intact. Optionally add the tracker to blog + wiki, which have none.
+- [ ] 🔴 **Rotate the Route53 IAM key** (`prod-route53-credentials-secret`, cert-manager ns) — its value
+      was printed into an assistant transcript on 2026-09-01.
+- [ ] 🟠 **sey BIOS**: set the internal SSD as sole boot device / disable USB boot, to fix the
+      reproducible warm-reboot hang at POST.
+- [ ] 🟠 **Pick a notification channel** (ntfy was removed). Needed for upgrade reports + the alerts below.
+
+### 🔴 High priority
+- [ ] **Record the `bitnamilegacy` repointing in the repo** (matomo, matomo-mariadb, kutt-postgresql,
+      kutt-redis-master, resow mongo + exporter sidecars). Until then, see the warning above.
+- [ ] **Plan a migration off Bitnami** — they moved free images off Docker Hub (`bitnami/*` is empty now)
+      and current builds are paid. Options: pin `bitnamilegacy/*`, or move to official upstream images.
+- [ ] **rook/ceph v1.10.10 → v1.20.6** — follow rook's documented per-minor upgrade path. Do NOT
+      image-bump the storage operator.
+- [ ] **Add a PVC-nearly-full alert.** A full PVC silently wedged prometheus and nothing told us.
+      Also worth: OSD-down alert (Ceph), and node disk alerts.
+
+### 🟠 Upgrades still outstanding
+- [ ] **matomo 4.15.1 → 5.x** — blocked: chart 11.0.0 wants a `bitnami/matomo` image that no longer exists.
+      Use chart 11.0.0 + `image.repository=bitnamilegacy/matomo` (5.3.2 exists there), or migrate off bitnami.
+      DB + app data already backed up to `archive/matomo/`.
+- [ ] **kutt v2.7.4 → v3.2.6** (major; Postgres + Redis) — dump Postgres to `archive/` first.
+- [ ] **system-upgrade-controller** — v0.20.1 crashloops on the old RBAC (it self-installs its CRD).
+      Apply the upstream manifest for the target version instead of bumping the image. Currently reverted to v0.13.4.
+- [ ] **filebrowser v2.23.0 → v2.63.x** — failed readiness once and auto-reverted; needs a deliberate upgrade.
+- [ ] **kube-state-metrics v2.8.0** → latest (version lookup was GitHub-rate-limited).
+- [ ] Pin the remaining **`:latest`** images (13 found; mostly own builds + `library/nginx`).
+- [ ] 🟢 Optional big win: drop Kubernetes histogram buckets to cut ~1/3 of prometheus series
+      (`apiserver_request_duration_seconds_bucket` etc. — see the prometheus section).
+
+### 🟠 Cleanups / smaller work
+- [ ] Remove the leftover **`ca-certs` hostPath mount** on `mysite-deployment`'s git-sync (debugging
+      residue; harmless but drift). Use `$patch: replace` or delete+re-apply — not an index patch.
+- [ ] **Migrate to `sachiniyer/git-sync-webhooks`** (webhooks instead of 10s polling) across the 6
+      git-sync deployments. Needs a webhook secret + GitHub webhook config per repo.
+- [ ] **Phase 2 leftovers**: export `rook-ceph` manifests into the repo (the other unmanaged namespaces
+      were deleted 2026-09-01).
+- [ ] Review/prune the **~44 legacy S3 buckets** (inventory + categories in `BACKUPS.md`).
+- [ ] Cosmetic: repo dir `schooldemo/` vs live namespace `school-demo`.
+- [ ] **hermes** personal-assistant agent — deferred; you define scope first (see its section).
+
+### ✅ Recently completed (don't redo)
+All machines rebooted + kernels patched; unattended-upgrades + journald caps fleet-wide; tunnel boot-DNS
+hardened; **headscale 0.20.0 → 0.29.3**; **cert-manager 1.12.3 → 1.21.1** (issuance verified);
+**Vaultwarden 1.35.7 → 1.37.2** + **restore test passed end-to-end**; prometheus **v3.14.0** with a durable
+retention cap (runaway-WAL wedge fixed); ntfy/privatebin/pushgateway/node-exporter/alertmanager/
+prometheus-operator/configmap-reload upgraded; S3 backups + IaC + docs; **removed** minecraft, ntfy,
+metallb, prometheus-operator, cnpg-system, dns, tc-system (+ earlier: forgejo, jupyterhub, dav, rss,
+alexbday, ctf, skypilot-system, backup, debian); milstead sleep disabled; disks reclaimed.
+
+---
+
 ## Progress log — 2026-07-15
 
 Site-wide outage this day was a **home-router failure** breaking the WireGuard data
@@ -172,6 +249,11 @@ Key realities / decisions to make first:
 - **Hardware (not in scope):** move osd.2 disk off USB-SATA; OSD-down→ntfy alert; herkimer mon low-space.
 
 ---
+
+> ⚠️ **The Phase 0–6 sections below are the ORIGINAL 2026-07-01 plan.** Many of their unchecked boxes
+> have since been completed (teardowns, k3s convergence, osd.2, backups, certs, reboots, upgrades) —
+> their checkboxes were never ticked. **Treat "⭐ START HERE" at the top of this file as authoritative**
+> for what is actually still open; use these sections for original context only.
 
 ## Phase 0 — Active outages (fix first)
 
