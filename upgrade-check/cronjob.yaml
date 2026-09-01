@@ -2,7 +2,8 @@
 # Weekly upgrade CHECKER. Deliberately does not apply anything: on 2026-08-10 a single batch of
 # app upgrades produced one that needed a strategy change (Vaultwarden), one that broke outright
 # (filebrowser), and one clean major bump (privatebin). So: detect automatically, apply by hand.
-# Reports outdated container images to ntfy topic "cluster-updates".
+# Reports outdated container images to the job log (ntfy was removed 2026-09-01; a real
+# notification channel is still an open TODO).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
