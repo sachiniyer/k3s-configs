@@ -51,8 +51,8 @@ supports multiple Bridge installs.
    `--cli-input-json` recipe in `external-secrets/README.md` — never as a shell
    argument). Uncomment the entry already stubbed in `externalsecret.yaml`.
 6. Add `proton-data` to `backup-cronjob.yaml`.
-7. Prerequisite to confirm with him: Bridge needs a **paid** plan (Mail Plus or
-   Unlimited). It does not work on free accounts.
+Prerequisite already settled: **his Proton plan is paid (confirmed
+2026-09-20)**, so Bridge is supported. Do not re-ask.
 
 ### 2. Signal channel (transport proven, code unwritten)
 

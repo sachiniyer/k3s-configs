@@ -89,8 +89,8 @@ The fiddly one, because **Proton Bridge has to be deployed and running before
 you can log into it.** Proton has no API; Bridge decrypts locally and re-exposes
 the mailbox as IMAP/SMTP on localhost.
 
-- **Prerequisite:** a **paid** plan (Mail Plus or Unlimited). Bridge does not
-  work on free accounts.
+- **Prerequisite:** ~~paid plan~~ **CONFIRMED paid 2026-09-20** — Bridge is
+  supported. (It does not work on free accounts; this is no longer a blocker.)
 - **Order matters:**
   1. Deploy Bridge (its own PVC for the account DB + keychain — not yet built)
   2. `kubectl exec` into it and run the interactive login, including 2FA
