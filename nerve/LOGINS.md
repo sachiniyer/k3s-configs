@@ -83,11 +83,23 @@ the token.
   `gog calendar calendars -a <email> -p`. Note `messages list` requires a query
   argument, and the calendar subcommand is `calendars`, not `calendars list`.
 
-## ⬜ Proton Mail
+## ✅ Proton Mail
 
-The fiddly one, because **Proton Bridge has to be deployed and running before
-you can log into it.** Proton has no API; Bridge decrypts locally and re-exposes
-the mailbox as IMAP/SMTP on localhost.
+Done 2026-09-20 for **sachin@sachiniyer.com**. Verified listing folders and
+reading real inbox messages through `himalaya`. Bridge runs as a sidecar;
+password in SSM `/cluster/nerve/PROTON_BRIDGE_PASSWORD`, `proton-data` PVC in
+the backup set.
+
+**Bridge self-updates and that breaks it.** During the login it updated itself
+to 3.26.0 onto the PVC, and that build needs `libfido2.so.1`, which the image
+does not carry — so it died with `exit status 127`, and because the update
+lives on the volume the breakage survived restarts. The sidecar command now
+clears the update directory at start, which makes it self-healing. If Bridge
+ever fails to launch, look there first.
+
+Proton has no API; Bridge decrypts locally and re-exposes the mailbox as
+IMAP/SMTP on localhost. The loopback hop is plaintext and that is correct —
+Bridge holds the TLS session out to Proton.
 
 - **Prerequisite:** ~~paid plan~~ **CONFIRMED paid 2026-09-20** — Bridge is
   supported. (It does not work on free accounts; this is no longer a blocker.)

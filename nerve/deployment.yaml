@@ -119,7 +119,7 @@ spec:
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:afa118aba255c6776e3b07f78e8f34dacc5b8008859369e28bf589ee27956c42
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:095825f570b0936e6fd28a91d7886acc30e0ed463e54117ea4326b8c8021ceae
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -156,6 +156,14 @@ spec:
                 secretKeyRef:
                   name: nerve-secrets
                   key: GOG_KEYRING_PASSWORD
+            # Bridge-generated IMAP password (NOT the Proton account password).
+            # himalaya reads it via a password command so it is never written
+            # into config.toml on the PVC.
+            - name: PROTON_BRIDGE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: PROTON_BRIDGE_PASSWORD
           volumeMounts:
             - name: data
               mountPath: /root/.nerve
@@ -206,6 +214,39 @@ spec:
               # kill the pod, not the node.
               memory: 2Gi
 
+        # Proton Mail Bridge. Proton has no API; Bridge decrypts locally and
+        # re-exposes the mailbox as IMAP/SMTP. Sidecar rather than its own
+        # Deployment so those ports stay on 127.0.0.1 and need no auth.
+        #
+        # The command wrapper is load-bearing. Bridge SELF-UPDATES into
+        # $HOME/.local/share/protonmail/bridge-v3/updates/ on the PVC, and the
+        # updated build needs libfido2.so.1, which this image does not carry —
+        # so the update bricks it with "exit status 127" and the breakage
+        # persists across restarts because it lives on the volume. Clearing the
+        # directory at start makes that self-healing: worst case it re-updates
+        # mid-run and the next restart fixes it again.
+        - name: proton-bridge
+          image: shenxn/protonmail-bridge@sha256:3717b4441130675dc9131196de9f9c5287d2ea21b138d83b0486429e1737638a
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -c
+            - |
+              rm -rf /root/.local/share/protonmail/bridge-v3/updates/* || true
+              # Bridge writes ~5MB log files and never prunes them; left alone
+              # they fill the PVC.
+              find /root/.local/share/protonmail/bridge-v3/logs -type f -mtime +3 -delete 2>/dev/null || true
+              exec bash /protonmail/entrypoint.sh
+          volumeMounts:
+            - name: proton
+              mountPath: /root
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+
         # Signal transport. Speaks the Signal protocol so nerve does not have
         # to; the channel talks to it over localhost HTTP.
         #
@@ -237,6 +278,9 @@ spec:
         - name: signal
           persistentVolumeClaim:
             claimName: signal-data
+        - name: proton
+          persistentVolumeClaim:
+            claimName: proton-data
         - name: data
           persistentVolumeClaim:
             claimName: nerve-data

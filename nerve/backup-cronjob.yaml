@@ -66,6 +66,11 @@ spec:
                     --exclude "lost+found/*" --exclude ".cache/*"
                   aws s3 sync /workspace "${base}/workspace/" --sse AES256 \
                     --exclude "lost+found/*" --exclude ".git/*"
+                  # Proton Bridge: vault, account DB and the GPG/pass store.
+                  # Excludes logs and the self-update dir, neither of which is
+                  # worth restoring.
+                  aws s3 sync /proton "${base}/proton/" --sse AES256 \
+                    --exclude "lost+found/*" --exclude "*/logs/*" --exclude "*/updates/*"
                   echo "nerve backup complete: ${ts}"
               envFrom:
                 - secretRef:
@@ -83,6 +88,9 @@ spec:
                 - name: workspace
                   mountPath: /workspace
                   readOnly: true
+                - name: proton
+                  mountPath: /proton
+                  readOnly: true
           volumes:
             - name: data
               persistentVolumeClaim:
@@ -95,4 +103,8 @@ spec:
             - name: workspace
               persistentVolumeClaim:
                 claimName: nerve-workspace
+                readOnly: true
+            - name: proton
+              persistentVolumeClaim:
+                claimName: proton-data
                 readOnly: true
