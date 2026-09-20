@@ -61,3 +61,19 @@ spec:
   resources:
     requests:
       storage: 5Gi
+---
+# Proton Bridge state: the encrypted vault, the account DB, and the GPG/pass
+# store that unlocks it. Losing this means redoing the interactive login,
+# 2FA included.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: proton-data
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 5Gi

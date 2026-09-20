@@ -119,7 +119,7 @@ spec:
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:49d42472659d65c6f13505c7ae50c003f7f909e7000de51128c10100eed81814
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:afa118aba255c6776e3b07f78e8f34dacc5b8008859369e28bf589ee27956c42
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
