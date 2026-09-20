@@ -1,0 +1,53 @@
+---
+# Machine-local config, mounted to $NERVE_HOME/config.yaml.
+#
+# Any string may reference an environment variable as ${VAR} (required) or
+# ${VAR:-default} (optional). That is the seam to External Secrets: secrets
+# arrive as env vars and are referenced here, so nothing secret is in git.
+#
+# Mounted with subPath, so a change here needs a pod restart to take effect —
+# which is what we want. Cron is the exception and reloads live (see README).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nerve-config
+  namespace: nerve
+data:
+  config.yaml: |
+    # Core
+    workspace: /root/nerve-workspace
+    timezone: America/Los_Angeles
+
+    agent:
+      model: claude-opus-5
+      # Scheduled work runs unattended and is mostly summarisation; it does not
+      # need Opus prices. This is the main cost lever.
+      cron_model: claude-sonnet-5
+      title_model: claude-haiku-4-5-20251001
+      max_turns: 50
+      # Bounds a runaway. One human talking to one agent does not need 32.
+      max_concurrent: 4
+      # Background sub-agents do NOT inherit Write/Edit/Bash. See PLAN.md §10.
+      background_agent_permissions: false
+      # `nerve init` writes thinking/effort: max into the workspace
+      # settings.yaml layer. `max` is the "correctness matters more than cost"
+      # setting; for a chat assistant `high` is the usual sweet spot and this
+      # spend comes out of the same subscription pool as interactive Claude
+      # Code. Set explicitly so the generated defaults do not stand.
+      thinking: high
+      effort: high
+
+    gateway:
+      host: 0.0.0.0
+      port: 8900
+      # No TLS here — traefik terminates it at the ingress with a real
+      # Let's Encrypt cert (see ingress.yaml).
+
+    # Channels. Telegram is deliberately off: the web UI is the Phase 1 surface
+    # and Signal replaces Telegram entirely in Phase 3. See PLAN.md §7.
+    telegram:
+      enabled: false
+
+    # Quiet hours — no unprompted messages in this window (local timezone).
+    quiet_start: "23:00"
+    quiet_end: "08:00"

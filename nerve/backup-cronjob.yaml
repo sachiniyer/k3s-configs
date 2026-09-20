@@ -1,0 +1,98 @@
+---
+# Daily nerve backup -> S3 (sachiniyer-cluster-backups, SSE-AES256, 30d lifecycle).
+#
+# Runs in the nerve ns so it can mount the RWO PVCs; podAffinity co-locates it on
+# the same node as the nerve pod (RWO = one node at a time). Creds come from the
+# cluster-backup-aws Secret (scoped IAM user, S3 write to the one bucket only),
+# which is NOT committed to git — copy it in from the bitwarden ns, see README.
+#
+# Three volumes, three different reasons:
+#   data/      conversation history, sessions, and config.local.yaml (which holds
+#              the generated gateway jwt_secret). Not recoverable from anywhere else.
+#   tools/     CLI credentials and artifacts. Losing these means redoing the
+#              interactive Proton Bridge / Gmail logins.
+#   workspace/ soul, skills, crons, MEMORY.md. Mostly in git — but the agent
+#              writes MEMORY.md and new skills here and nothing pushes them back
+#              yet, so until that exists this is the only copy of what it learns.
+#
+# Scheduled at 04:47 to avoid the other backup jobs (vaultwarden 04:17,
+# headscale 04:30, ssm Sundays 05:00).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nerve-backup
+  namespace: nerve
+spec:
+  schedule: "47 4 * * *"
+  # Explicit, because the default is NOT UTC — it is whatever timezone the
+  # kube-controller-manager runs in. Verified empirically on 2026-09-20: a
+  # "47 4" schedule fired at 08:47Z, i.e. the controller is on UTC-4 (Eastern).
+  # Every other CronJob in this cluster (vaultwarden 04:17, ssm 05:00,
+  # upgrade-check) inherits that same implicit Eastern schedule and is
+  # therefore running 3 hours off from local time. Pinning it here means this
+  # job's schedule survives the controller's timezone changing under it.
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: nerve
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: backup
+              image: amazon/aws-cli:2.15.30
+              # The aws-cli image has no tar, so back up file-level with
+              # `aws s3 sync` to a dated prefix. SQLite WAL/SHM files are
+              # included so a restore is consistent.
+              command: ["/bin/bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  ts=$(date +%F)
+                  base="s3://sachiniyer-cluster-backups/nerve/${ts}"
+                  aws s3 sync /data "${base}/data/" --sse AES256 \
+                    --exclude "lost+found/*" --exclude "cache/*" --exclude "logs/*"
+                  aws s3 sync /tools "${base}/tools/" --sse AES256 \
+                    --exclude "lost+found/*" --exclude ".cache/*"
+                  aws s3 sync /workspace "${base}/workspace/" --sse AES256 \
+                    --exclude "lost+found/*" --exclude ".git/*"
+                  echo "nerve backup complete: ${ts}"
+              envFrom:
+                - secretRef:
+                    name: cluster-backup-aws
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: us-east-1
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: tools
+                  mountPath: /tools
+                  readOnly: true
+                - name: workspace
+                  mountPath: /workspace
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: nerve-data
+                readOnly: true
+            - name: tools
+              persistentVolumeClaim:
+                claimName: nerve-tools
+                readOnly: true
+            - name: workspace
+              persistentVolumeClaim:
+                claimName: nerve-workspace
+                readOnly: true

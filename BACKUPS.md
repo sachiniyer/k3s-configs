@@ -8,7 +8,7 @@ rotating backups live under a per-service prefix with a 30-day lifecycle; **one-
 
 Private (public access blocked), default **SSE-AES256**, versioning on. Access via scoped IAM user
 `cluster-backup` (policy `s3-backup-write`: `PutObject`/`ListBucket` on this bucket only). Two keys:
-a k8s Secret `cluster-backup-aws` in the `bitwarden` ns (the CronJob), and `/root/.aws/credentials`
+k8s Secrets `cluster-backup-aws` in the `bitwarden` and `nerve` namespaces (the CronJobs), and `/root/.aws/credentials`
 on the tunnel (the timer). **Neither key is in git.**
 
 ### Layout & retention
@@ -16,10 +16,11 @@ on the tunnel (the timer). **Neither key is in git.**
 |---|---|---|---|
 | `vaultwarden/<date>/` | Vaultwarden `/data`: `db.sqlite3` (+ `-wal`/`-shm`), `attachments/`, `rsa_key*.pem`, `sends/` | CronJob `vaultwarden-backup` (`bitwarden` ns, daily 04:17) — `bitwarden/backup-cronjob.yaml` | **30 days** |
 | `headscale/headscale-<date>.tgz` | headscale `db.sqlite` + `config.yaml` + node keys | systemd `headscale-backup.timer` (tunnel, daily 04:30) — `/usr/local/bin/headscale-backup.sh` | **30 days** |
+| `nerve/<date>/{data,tools,workspace}/` | Personal agent: `data/` = SQLite DBs, sessions, `config.local.yaml` (gateway jwt_secret); `tools/` = CLI credentials (himalaya, gog) — losing these means redoing interactive mail logins; `workspace/` = soul, skills, crons, MEMORY.md (mostly in git, but the agent's own writes are not pushed back yet) | CronJob `nerve-backup` (`nerve` ns, daily 04:47) — `nerve/backup-cronjob.yaml` | **30 days** |
 | `ssm/cluster-ssm-<ts>.json` | Full snapshot of every `/cluster/*` SSM parameter (all app secrets), incl. `Name`/`Type`/`Value`/`Version` | CronJob `ssm-backup` (`external-secrets` ns, Sundays 05:00) — `external-secrets/ssm-backup-cronjob.yaml` | **365 days** |
 | `archive/<name>/…` | One-off archives of decommissioned data | manual | **permanent** (no lifecycle rule) |
 
-Lifecycle rules (verified 2026-09-01): `vaultwarden/` → 30d, `headscale/` → 30d, `ssm/` → 365d.
+Lifecycle rules (verified 2026-09-20): `vaultwarden/` → 30d, `headscale/` → 30d, `nerve/` → 30d, `ssm/` → 365d.
 `archive/` is covered by **no** rule, so it is kept indefinitely. Config is versioned in
 `s3/lifecycle.json` — that file is the full desired state, so edit and re-`put` it rather than
 adding rules ad hoc (a `put` replaces *all* rules).

@@ -1,0 +1,61 @@
+---
+# nerve.sachiniyer.com — MESH-ONLY.
+#
+# The security control here is an ABSENCE: this host is deliberately NOT in the
+# SNI map in persistent/repo/nginx.conf. Names missing from that map fall
+# through to the *.sachiniyer.com wildcard, which resolves to 100.64.0.3 — the
+# headscale mesh IP — so the gateway is reachable only from mesh-joined
+# devices. A curl from off-mesh returning 000 is correct, not an outage.
+#
+# Do not add this host to nginx.conf. The gateway is an unauthenticated agent
+# with shell access (see PLAN.md §6 for why auth is off), so the tailnet
+# boundary is the only thing in front of it.
+#
+# The cert issues over DNS-01, which is what lets a host that is not publicly
+# reachable still get a real Let's Encrypt certificate.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nerve-cert
+  namespace: nerve
+spec:
+  commonName: nerve.sachiniyer.com
+  secretName: nerve-cert
+  dnsNames:
+    - nerve.sachiniyer.com
+  issuerRef:
+    name: letsencrypt-prod-dns
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect
+  namespace: nerve
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nerve-ingress
+  namespace: nerve
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: nerve-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - secretName: nerve-cert
+  rules:
+    - host: nerve.sachiniyer.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nerve-service
+                port:
+                  number: 80

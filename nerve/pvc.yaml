@@ -1,0 +1,63 @@
+---
+# State. SQLite databases, logs, sessions, and the machine-local config.
+# Losing this loses conversation history and cron run state.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nerve-data
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Workspace. A clone of sachiniyer/nerve-workspace — soul, skills, crons,
+# TOOLS.md. Recoverable from git, so it is sized for working space rather than
+# durability.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nerve-workspace
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 5Gi
+---
+# CLI configuration, credentials and artifacts — himalaya, gog, and whatever
+# tooling comes later. Separate from nerve-data because its failure mode is
+# different: losing this means re-running interactive logins, losing nerve-data
+# means losing conversation history.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nerve-tools
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 5Gi
+---
+# signal-cli account keys and message state. Losing this means re-linking the
+# device from the phone — NEVER wipe it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: signal-data
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 5Gi

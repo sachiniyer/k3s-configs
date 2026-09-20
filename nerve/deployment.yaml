@@ -1,0 +1,248 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nerve
+  namespace: nerve
+  labels:
+    app: nerve
+spec:
+  replicas: 1
+  # Single replica on RWO volumes. The default RollingUpdate deadlocks — the
+  # new pod waits forever on a volume the old pod still holds. This has bitten
+  # Vaultwarden, prometheus, matomo and resow mongo on this cluster already.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nerve
+  template:
+    metadata:
+      labels:
+        app: nerve
+    spec:
+      # milstead is a laptop that suspends — a pod there goes NotReady until
+      # someone physically wakes it, which for an always-on agent is a silent
+      # outage. That is a hard exclusion, not a preference.
+      #
+      # herkimer is a soft one: it is the sole control plane and runs an
+      # ingress pod, so restarting it already blips the public site. No reason
+      # to add another tenant. Ceph RWO volumes follow the pod, so preferring
+      # devocion/sey costs nothing.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: ["milstead"]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: ["herkimer"]
+
+      initContainers:
+        # Clone the workspace repo on first boot. A no-op once the PVC has a
+        # checkout — the running agent owns that directory afterwards, and
+        # clobbering it would throw away memory it has written since.
+        - name: workspace-clone
+          image: alpine/git:2.47.2
+          env:
+            - name: WORKSPACE_DEPLOY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: WORKSPACE_DEPLOY_KEY
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              setup_key() {
+                install -m 700 -d /root/.ssh
+                printf '%s\n' "$WORKSPACE_DEPLOY_KEY" > /root/.ssh/id_ed25519
+                chmod 600 /root/.ssh/id_ed25519
+                ssh-keyscan -t ed25519 github.com > /root/.ssh/known_hosts 2>/dev/null
+                export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o UserKnownHostsFile=/root/.ssh/known_hosts -o IdentitiesOnly=yes"
+              }
+              if [ -d /workspace/.git ]; then
+                # Config (settings.yaml, cron/, skills/) is authored in the repo,
+                # so pull it forward on restart. --ff-only, never a reset: the
+                # agent writes its own MEMORY.md and skills into this tree, and
+                # a hard reset would silently destroy everything it has learned.
+                # A refused fast-forward means the two have genuinely diverged —
+                # that wants a human, not a --force.
+                setup_key
+                cd /workspace
+                # Never pipe the command whose status is being tested: a pipeline
+                # reports the LAST element's status, so `git ... | tail` always
+                # looks like success. That is how the first version of this
+                # script reported "fast-forwarded" while the merge had failed.
+                #
+                # --unshallow because the initial clone is --depth 1; a shallow
+                # repo plus a shallow fetch produces grafted histories with no
+                # common ancestor, and the merge dies with "refusing to merge
+                # unrelated histories". Already-complete repos exit non-zero on
+                # --unshallow, which is fine and ignored.
+                git fetch --unshallow origin main 2>/dev/null || git fetch origin main || true
+                if git merge --ff-only origin/main; then
+                  echo "workspace fast-forwarded to $(git rev-parse --short HEAD)"
+                else
+                  echo "WARNING: workspace could not fast-forward to origin/main"
+                  echo "WARNING: and was left untouched. Config changes in the repo"
+                  echo "WARNING: are NOT live. Reconcile by hand."
+                fi
+                exit 0
+              fi
+              # Key material stays in this container, which exits before nerve
+              # starts. github.com's host key is pinned, not disabled.
+              setup_key
+              echo "cloning workspace repo"
+              # Full clone, not --depth 1: the workspace is a few hundred KB,
+              # and a shallow clone makes every later fetch/merge a grafted-
+              # history problem for no meaningful saving.
+              git clone git@github.com:sachiniyer/nerve-workspace.git /tmp/ws
+              # Move contents including dotfiles, preserving the mount point.
+              cd /tmp/ws && tar cf - . | (cd /workspace && tar xf -)
+              echo "workspace seeded"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+
+      containers:
+        - name: nerve
+          # Built from sachiniyer/nerve, branch `signal`, Dockerfile.k8s.
+          # Pinned by digest, not tag: a floating tag is exactly the kind of
+          # quiet drift this cluster has been bitten by. Rebuild -> push ->
+          # update this digest deliberately.
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:49d42472659d65c6f13505c7ae50c003f7f909e7000de51128c10100eed81814
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8900
+          env:
+            # Claude subscription auth. The Agent SDK reads this natively.
+            # To move to pay-per-token instead, swap this for ANTHROPIC_API_KEY
+            # (and the matching key in externalsecret.yaml) — nothing else
+            # changes. The SDK prefers ANTHROPIC_API_KEY when both are present.
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: CLAUDE_CODE_OAUTH_TOKEN
+            # Point XDG-aware CLIs at the persistent volume. Tools that hardcode
+            # ~/.config are covered by the mount path itself; these catch the
+            # ones that write data/state elsewhere by default.
+            - name: XDG_CONFIG_HOME
+              value: /root/.config
+            - name: XDG_DATA_HOME
+              value: /root/.config/.data
+            - name: XDG_STATE_HOME
+              value: /root/.config/.state
+            # link-cli persists its OAuth credentials to a local file. Point it
+            # at the tools PVC so the one interactive `auth login` survives pod
+            # restarts and rescheduling — otherwise the agent silently loses its
+            # wallet access and you re-approve from a phone every time.
+            - name: LINK_AUTH_FILE
+              value: /root/.config/link/auth.json
+            # Unlocks gog's file keyring (Gmail/Calendar refresh tokens) in
+            # non-interactive contexts — cron jobs included.
+            - name: GOG_KEYRING_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: GOG_KEYRING_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /root/.nerve
+            - name: workspace
+              mountPath: /root/nerve-workspace
+            # CLI configuration, credentials and artifacts. Anything a tool we
+            # add later writes — himalaya, gog, a Linear CLI — must land here or
+            # it is on the container rootfs and dies with the pod. The XDG_*
+            # env vars below corral well-behaved tools into this one volume.
+            - name: tools
+              mountPath: /root/.config
+            # NOTE: nerve's own config is deliberately NOT mounted here.
+            #
+            # `nerve init` owns and rewrites both config.yaml and
+            # config.local.yaml in $NERVE_HOME (the latter is where it puts the
+            # generated gateway jwt_secret). Mounting either read-only makes
+            # init crash with EROFS. Our settings live in the workspace's
+            # config/settings.yaml instead — the git-tracked shared layer that
+            # init explicitly leaves alone for keys it does not generate.
+          # First boot clones the workspace and runs migrations before the
+          # gateway binds, so startup gets a long runway. Once started, an
+          # unhealthy container is restarted rather than left wedged.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              # No CPU limit on purpose: throttling an agent mid-turn makes it
+              # slow rather than safe. Memory is capped because a leak should
+              # kill the pod, not the node.
+              memory: 2Gi
+
+        # Signal transport. Speaks the Signal protocol so nerve does not have
+        # to; the channel talks to it over localhost HTTP.
+        #
+        # MODE=json-rpc is load-bearing. In MODE=normal the receive websocket
+        # upgrade fails SILENTLY — no error, no inbound messages, a container
+        # that looks perfectly healthy. Do not change it.
+        - name: signal-api
+          image: bbernhard/signal-cli-rest-api@sha256:2399d449123cdad56c4d859277e3b9127e1a00c4d2ab4601c239882609286cf8
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODE
+              value: json-rpc
+          ports:
+            - name: signal
+              containerPort: 8080
+          volumeMounts:
+            - name: signal
+              mountPath: /home/.local/share/signal-cli
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # json-rpc mode keeps a JVM resident; it is the memory-hungry
+              # part of this pod.
+              memory: 1Gi
+
+      volumes:
+        - name: signal
+          persistentVolumeClaim:
+            claimName: signal-data
+        - name: data
+          persistentVolumeClaim:
+            claimName: nerve-data
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: nerve-workspace
+        - name: tools
+          persistentVolumeClaim:
+            claimName: nerve-tools

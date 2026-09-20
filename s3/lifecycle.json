@@ -2,24 +2,55 @@
   "Rules": [
     {
       "ID": "vaultwarden-rotate-30d",
-      "Filter": { "Prefix": "vaultwarden/" },
+      "Filter": {
+        "Prefix": "vaultwarden/"
+      },
       "Status": "Enabled",
-      "Expiration": { "Days": 30 },
-      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
     },
     {
       "ID": "headscale-rotate-30d",
-      "Filter": { "Prefix": "headscale/" },
+      "Filter": {
+        "Prefix": "headscale/"
+      },
       "Status": "Enabled",
-      "Expiration": { "Days": 30 },
-      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
     },
     {
       "ID": "ssm-rotate-365d",
-      "Filter": { "Prefix": "ssm/" },
+      "Filter": {
+        "Prefix": "ssm/"
+      },
       "Status": "Enabled",
-      "Expiration": { "Days": 365 },
-      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+      "Expiration": {
+        "Days": 365
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 30
+      }
+    },
+    {
+      "ID": "nerve-rotate-30d",
+      "Filter": {
+        "Prefix": "nerve/"
+      },
+      "Status": "Enabled",
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
     }
   ]
 }
