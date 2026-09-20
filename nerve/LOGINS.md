@@ -40,13 +40,17 @@ one credential here with a clock on it.
 
 Done 2026-09-20. No expiry.
 
-- Read-only ed25519 deploy key on `sachiniyer/nerve-workspace`, private half in
-  SSM `/cluster/nerve/WORKSPACE_DEPLOY_KEY`.
+- **Read-write** ed25519 deploy key on `sachiniyer/nerve-workspace`, private
+  half in SSM `/cluster/nerve/WORKSPACE_DEPLOY_KEY` (v2). The original
+  read-only key was retired 2026-09-20.
 - Scoped to that one repo; it cannot reach anything else in the account, which
   a personal access token could.
-- **Limitation:** read-only means the agent cannot push its own memory or
-  skills back, and cannot open config-change PRs. Upgrading that needs a
-  read-write credential — a deliberate decision, not an oversight.
+- **Write access is intentional.** The `workspace-push` sidecar commits and
+  pushes the agent's own writes — memory, skills it authors — to `main` every
+  ~15 minutes, unreviewed. Sachin chose that: the repo is private, it belongs
+  to the agent, and git history is the undo. Do not add a review gate.
+- A deploy key **cannot open pull requests**. `propose_config_change` therefore
+  does not work here and the workspace skill tells the agent not to try it.
 
 ---
 

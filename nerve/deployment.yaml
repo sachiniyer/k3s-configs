@@ -119,7 +119,7 @@ spec:
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:095825f570b0936e6fd28a91d7886acc30e0ed463e54117ea4326b8c8021ceae
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:03f9bd6c58d53a88a4d2a04eb3585f5934770a9b7b6d1b1d38a690fc52878488
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -213,6 +213,69 @@ spec:
               # slow rather than safe. Memory is capped because a leak should
               # kill the pod, not the node.
               memory: 2Gi
+
+        # Workspace push-back. The agent writes its own MEMORY.md and authors
+        # skills into the workspace; without this they live only on the PVC,
+        # unversioned and unreviewable. This commits and pushes them so what
+        # the agent learns shows up as a diff.
+        #
+        # Rebase before pushing, so edits made from a laptop and writes made by
+        # the agent do not diverge into a branch nobody can fast-forward. A
+        # rebase that conflicts is left alone and logged — that wants a human,
+        # and silently resolving it would throw away one side.
+        - name: workspace-push
+          image: alpine/git:2.47.2
+          env:
+            - name: WORKSPACE_DEPLOY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: WORKSPACE_DEPLOY_KEY
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              install -m 700 -d /root/.ssh
+              printf '%s\n' "$WORKSPACE_DEPLOY_KEY" > /root/.ssh/id_ed25519
+              chmod 600 /root/.ssh/id_ed25519
+              ssh-keyscan -t ed25519 github.com > /root/.ssh/known_hosts 2>/dev/null
+              export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o UserKnownHostsFile=/root/.ssh/known_hosts -o IdentitiesOnly=yes"
+              git config --global user.name  "nerve"
+              git config --global user.email "nerve@sachiniyer.com"
+              git config --global --add safe.directory /workspace
+              while true; do
+                sleep 900
+                cd /workspace || continue
+                [ -d .git ] || continue
+                if [ -z "$(git status --porcelain)" ]; then continue; fi
+                echo "workspace-push: changes detected"
+                git add -A
+                git commit -q -m "agent: workspace state $(date -u +%Y-%m-%dT%H:%MZ)" \
+                  -m "Committed by the push-back sidecar. These are the agent's own
+              writes — memory, skills it authored, cron state — not a human change." \
+                  || continue
+                git fetch -q origin main || continue
+                if ! git rebase -q origin/main; then
+                  git rebase --abort 2>/dev/null
+                  echo "workspace-push: WARNING rebase conflicted; left for a human"
+                  continue
+                fi
+                if git push -q origin HEAD:main; then
+                  echo "workspace-push: pushed $(git rev-parse --short HEAD)"
+                else
+                  echo "workspace-push: WARNING push rejected"
+                fi
+              done
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
 
         # Proton Mail Bridge. Proton has no API; Bridge decrypts locally and
         # re-exposes the mailbox as IMAP/SMTP. Sidecar rather than its own
