@@ -34,7 +34,9 @@ if [ -n "$(git -C "$FORK" status --porcelain)" ]; then
 fi
 
 echo "==> building"
-docker build -f Dockerfile.k8s -t "$IMAGE" "$FORK"
+# -f is resolved against the CWD, not the build context, so it must be
+# an absolute path into the fork — this script runs from k3s-configs/nerve.
+docker build -f "$FORK/Dockerfile.k8s" -t "$IMAGE" "$FORK"
 
 echo "==> pushing"
 gh auth token | docker login ghcr.io -u sachiniyer --password-stdin >/dev/null
