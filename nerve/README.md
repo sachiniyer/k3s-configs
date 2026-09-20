@@ -1,8 +1,14 @@
 # nerve — how to change things
 
-A personal agent on the cluster: reachable from Signal, with mail, calendar and
-a spending wallet. `PLAN.md` has the design and why; `LOGINS.md` has every
-credential; `TODO.md` has what is left.
+A personal agent on the cluster: reachable from Signal, with mail, calendars,
+contacts and a human-approved spending wallet.
+
+**New here? Read in this order:** this file (how to change things) →
+`TODO.md` (what it can and cannot do, and the "do not undo" list) →
+`LOGINS.md` (every credential and how to re-issue it) → `PLAN.md` (why it is
+built this way).
+
+Live at `nerve.sachiniyer.com` (mesh-only) and on Signal.
 
 **This file answers one question: I want to change X — where does that live and
 how does it reach the cluster?**
@@ -31,6 +37,7 @@ place, or the wrong thing in the right place.
 | add a CLI the agent can use | fork `Dockerfile.k8s`, then `./deploy.sh` |
 | change the Signal channel | fork `nerve/channels/signal.py`, then `./deploy.sh` |
 | add a secret | AWS SSM, then `externalsecret.yaml` + `deployment.yaml` |
+| add a helper script for a skill | workspace repo, `skills/<name>/scripts/` — shebang `#!/usr/local/bin/python3.13` |
 | add a volume, resource limit, sidecar | `deployment.yaml` here |
 
 **The agent also edits the workspace repo itself**, and a sidecar pushes its
@@ -105,8 +112,16 @@ kubectl -n nerve exec deploy/nerve -c nerve -- python3 -c \
 kubectl -n nerve exec deploy/nerve -c nerve -- himalaya envelope list -a proton -m Inbox -s 3
 kubectl -n nerve exec deploy/nerve -c nerve -- gog gmail messages list "in:inbox" -a sachinjiyer@gmail.com --max 3 -p
 kubectl -n nerve exec deploy/nerve -c nerve -- link-cli auth status
+kubectl -n nerve exec deploy/nerve -c nerve -- \
+  /root/nerve-workspace/skills/calendar/scripts/icloud-calendar calendars
+kubectl -n nerve exec deploy/nerve -c nerve -- \
+  /root/nerve-workspace/skills/contacts/scripts/icloud-contacts count
 kubectl -n nerve logs -l app=nerve -c nerve --tail=200 | grep "Registered channel"
 ```
+
+**A script that "works" on the laptop but not in the pod is almost always the
+interpreter.** `PATH` puts the nerve venv first and the venv has neither
+`caldav` nor `icalendar`; skill scripts must use `/usr/local/bin/python3.13`.
 
 ---
 

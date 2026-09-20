@@ -143,6 +143,43 @@ underneath it is known-good, which is the point of having done this first.
 - **Config:** the sidecar must run `MODE=json-rpc`. In `MODE=normal` the
   websocket upgrade fails silently and inbound messages never arrive.
 
+## ✅ Apple iCloud — app-specific password
+
+Done 2026-09-20 for **sachin@sachiniyer.com**. Verified: 4 calendars listed, a
+full create → read-back → delete round-trip on the shared `Calendar`, and 258
+contacts readable.
+
+- **Get it:** appleid.apple.com → Sign-In and Security → App-Specific
+  Passwords → Generate. Apple **refuses the account password** for third-party
+  clients; app-specific is the only way and needs 2FA on the account.
+- **Store:** SSM `/cluster/nerve/ICLOUD_APP_PASSWORD`.
+- **Scope is broader than calendar.** The same password grants Contacts over
+  CardDAV. Revocable on its own from that page without touching anything else.
+- **Verify:**
+  ```sh
+  kubectl -n nerve exec deploy/nerve -c nerve -- \
+    /root/nerve-workspace/skills/calendar/scripts/icloud-calendar calendars
+  kubectl -n nerve exec deploy/nerve -c nerve -- \
+    /root/nerve-workspace/skills/contacts/scripts/icloud-contacts count
+  ```
+
+**`Calendar` is the write default and is SHARED with Sachin's girlfriend.** A
+wrong event there is a notification to another person about a plan that does
+not exist. The skill requires stating the details in conversation first.
+
+**Not available on this account, with no workaround:** Reminders (migrated to a
+proprietary format; CalDAV returns only an "upgraded" placeholder) and iCloud
+Mail (no mailbox — IMAP auth fails).
+
+## ✅ Proton Calendar — read-only share link
+
+Done 2026-09-20. A published `.ics` URL, stored in SSM
+`/cluster/nerve/PROTON_CALENDAR_ICS_URL`. **The URL is itself a secret** — it
+embeds a passphrase, so holding it is read access to the calendar.
+
+Regenerate at calendar.proton.me → Settings → Calendars → Share with anyone.
+Read-only permanently: Proton has no API and no CalDAV.
+
 ## ✅ Link (Stripe agent wallet) — `link-cli`
 
 Done 2026-09-20. Scope granted: **`userinfo:read payment_methods.agentic`** —
