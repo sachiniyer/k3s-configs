@@ -54,6 +54,11 @@ every sign says the deploy worked**, which is the worst failure shape here.
 
 Commit the digest change afterwards — the script reminds you.
 
+**Rebasing the fork onto upstream:** see `REBASE.md` in the fork. Short version:
+only `nerve/config.py` and `nerve/gateway/server.py` are patched (58 additive
+lines), every insertion sits beside its Telegram equivalent, and the other
+three files are new so they cannot conflict.
+
 ## Changing config or a skill
 
 ```sh
