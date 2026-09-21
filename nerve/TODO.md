@@ -18,8 +18,8 @@ Start with `README.md` — it answers "I want to change X, where does that live"
 | Proton Mail | **read + write** (send, move, delete) | `himalaya -a proton`, via the Bridge sidecar |
 | Google Calendar | read | `gog calendar` (4 calendars) |
 | Proton Calendar | **read-only** | `skills/calendar/scripts/proton-calendar` |
-| iCloud Calendar | **read + write** | `skills/calendar/scripts/icloud-calendar` |
-| Contacts | read | `skills/contacts/scripts/icloud-contacts` (~258) |
+| iCloud Calendar | **read + write + edit + delete** | `skills/calendar/scripts/icloud-calendar` |
+| Contacts | **read + write** (add, edit, delete) | `skills/contacts/scripts/icloud-contacts` (~258) |
 | Spending | request, human-approved | `link-cli` (Stripe wallet) |
 | Memory | 3 tiers | `MEMORY.md` → `memory/*.md` → `transcripts` (raw sessions) |
 | Scheduled work | — | nerve cron, in the workspace repo |
@@ -30,12 +30,15 @@ nerve's `nerve-workspace` and `nerve-dev`.
 ### What it deliberately cannot do
 
 Each of these is a decision, not a gap. Do not "fix" one without meaning to.
+The list is deliberately SHORT: on 2026-09-20 Sachin asked for the opposite of
+caution — "the agent should be able to basically do everything and just be
+instructed to be careful instead". Calendar edit/delete and contact writes were
+removed from this list then. Do not add a new entry here because a misuse is
+imaginable; add one only because he asked for it.
 
 - **Send mail to a third party without showing it first.** Sending itself is
   enabled; mail leaving under Sachin's name gets recipient/subject/body shown
   to him first. His own mailboxes need no confirmation.
-- **Edit or delete calendar events**, or edit contacts. Adding is enabled;
-  changing someone else's view of a shared calendar is not.
 - **Spend without approval.** Every Link request needs a tap on his phone.
   `--approve` exists on the CLI and is forbidden in the skill.
 - **Touch the cluster.** No kubectl, no ServiceAccount.
