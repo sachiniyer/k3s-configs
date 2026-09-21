@@ -47,6 +47,32 @@ spec:
     requests:
       storage: 5Gi
 ---
+# Claude Code's own state directory ($CLAUDE_CONFIG_DIR, see deployment.yaml).
+#
+# This holds the Agent SDK's conversation .jsonl transcripts under projects/,
+# which are what `--resume` actually reads. nerve keeps the session *mapping*
+# in nerve-data, so without this volume the mapping survives a restart and the
+# transcript it points at does not: nerve logs "resume target ... is missing;
+# starting a fresh conversation" and the agent answers the next message with
+# the topic but no history. That is exactly what it looks like from Signal —
+# "this seems to be a continuation ... but I'm starting fresh without context".
+#
+# Separate from nerve-data on purpose: this is a cache owned by a vendored CLI
+# whose layout is not ours, and it can be deleted to recover disk at the cost
+# of one conversation's context.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nerve-claude
+  namespace: nerve
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+---
 # signal-cli account keys and message state. Losing this means re-linking the
 # device from the phone — NEVER wipe it.
 apiVersion: v1

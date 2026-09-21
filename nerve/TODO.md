@@ -75,9 +75,14 @@ The case against memU, so it does not get re-argued from scratch:
   That is a quality problem, not a corpus-size one.
 - **The corpus is small.** One person's life is hundreds to low thousands of
   facts. Semantic search over a large corpus is what memU is for.
-- **It fails silently, and proved it** — 401d for the entire life of this
-  deployment and nothing surfaced it. A memory system that quietly remembers
-  nothing is worse than none, because it gets trusted.
+- **It fails silently, and proved it twice** — 401d for the entire life of an
+  earlier deployment with nothing surfacing it, and then did it again: the
+  working key landed in SSM at 17:39 on 2026-09-20 but the running process had
+  already read the rejected one at start, so `memorize` returned "Invalid
+  Anthropic API Key" for four hours while `recall` looked fine. Only a pod
+  restart picked the new key up. **The env var is read once at start; rotating
+  the SSM parameter is not enough, the pod has to restart.** A memory system
+  that quietly remembers nothing is worse than none, because it gets trusted.
 - **`transcripts` covers most of it** — full-text over everything ever said,
   which is strictly more data, with verifiable results.
 - **It is the only opaque component here.** Everything else was deliberately
@@ -91,6 +96,14 @@ already argues against.
 ---
 
 ## Remaining work, in rough value order
+
+### 0. Known, not yet fixed: the npx CLI cache is still ephemeral
+
+`/root/.npm` is on the container filesystem, so the Claude Code CLI and the
+`skills` package are re-fetched from npm on every pod start. It works, but it
+makes startup depend on npm being reachable — which `Dockerfile.k8s` was
+explicitly written to avoid for everything else. Either bake it into the image
+or give `/root/.npm` a volume.
 
 ### 1. Alerting
 
@@ -152,6 +165,7 @@ health checks green, and the system quietly broken.**
 | Never pipe a command whose exit status is tested | `if git merge … \| tail` tests `tail`. Caused a silent stale-config start; `docker build \| tail` hid a failed build the same day |
 | `gog` keyring `file` + `GOG_KEYRING_PASSWORD` | Default `auto` means no keyring in a container: login appears to work, then every cron job silently fails to read the token |
 | `selfcheck.py` runs before `nerve start` | Reads config back out of the loader and makes one real model call. It has already caught a missing `link-cli` |
+| `nerve-claude` PVC at `/root/.claude` + `CLAUDE_CONFIG_DIR` | The Agent SDK's conversation `.jsonl` transcripts live here and are what a resume reads. nerve keeps the session *mapping* in `nerve-data`, so without this volume the mapping survives a restart and the transcript does not — **every conversation silently reset on every deploy**, the agent answering with the topic but no history. `CLAUDE_CONFIG_DIR` must stay `/root/.claude`: `validate_resume_target` hardcodes `~/.claude/projects` |
 | iCloud: `save_event`/`search` only | `event_by_uid` and todo queries return 412/500 on iCloud. `search` needs `expand=True` or recurring events report their creation date |
 | Scripts use `/usr/local/bin/python3.13` | `PATH` puts the nerve venv first, and the venv has neither `caldav` nor `icalendar` |
 | Use `./deploy.sh`, not manual builds | Forgetting the digest edit leaves the cluster on the **old image while every sign says the deploy worked**. This actually happened: `link-cli` was added to a working copy, never committed, and a later clean-clone rebuild silently dropped it |

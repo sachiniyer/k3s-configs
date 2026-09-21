@@ -119,7 +119,7 @@ spec:
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:447902f241214448976eaa2bcb7c6556661f9e40abf5a7ef4cb003bdc0908ae8
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:66f75f4c54b90ef7b6eb5477b7c67f939276f7c43bfa9e2ce804384e2c5844d1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -147,6 +147,18 @@ spec:
             # ones that write data/state elsewhere by default.
             - name: XDG_CONFIG_HOME
               value: /root/.config
+            # Claude Code's own state directory. It defaults to ~/.claude plus a
+            # loose ~/.claude.json; setting this pulls BOTH under one directory
+            # we can mount, which is the only reason it is here.
+            #
+            # The value must stay /root/.claude. nerve's resume check
+            # (validate_resume_target in nerve/agent/backends/claude.py) looks
+            # for the transcript under a hardcoded ~/.claude/projects, so
+            # pointing this anywhere else would make nerve and the CLI disagree
+            # about where history lives — and the symptom of that disagreement
+            # is silent context loss, not an error.
+            - name: CLAUDE_CONFIG_DIR
+              value: /root/.claude
             - name: XDG_DATA_HOME
               value: /root/.config/.data
             - name: XDG_STATE_HOME
@@ -206,6 +218,12 @@ spec:
             # env vars below corral well-behaved tools into this one volume.
             - name: tools
               mountPath: /root/.config
+            # Claude Code's transcripts. See the nerve-claude PVC comment: the
+            # session mapping lives in nerve-data and the transcript it points
+            # at lives here, so these two must persist together or every pod
+            # restart quietly resets every conversation.
+            - name: claude
+              mountPath: /root/.claude
             # NOTE: nerve's own config is deliberately NOT mounted here.
             #
             # `nerve init` owns and rewrites both config.yaml and
@@ -384,3 +402,6 @@ spec:
         - name: tools
           persistentVolumeClaim:
             claimName: nerve-tools
+        - name: claude
+          persistentVolumeClaim:
+            claimName: nerve-claude
