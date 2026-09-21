@@ -10,6 +10,12 @@ built this way).
 
 Live at `nerve.sachiniyer.com` (mesh-only) and on Signal.
 
+The web UI is an installable PWA — on a phone, "Add to Home Screen" gives it
+its own icon and no browser chrome. It is still mesh-only: an installed copy
+opens only while the device is on the tailnet, and shows a connection failure
+off it. The manifest, icons and service worker live in the fork under
+`web/public/`; see `REBASE.md` there.
+
 **This file answers one question: I want to change X — where does that live and
 how does it reach the cluster?**
 

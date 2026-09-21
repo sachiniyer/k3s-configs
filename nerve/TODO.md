@@ -13,7 +13,7 @@ Start with `README.md` — it answers "I want to change X, where does that live"
 | Capability | Access | How |
 |---|---|---|
 | Chat from a phone | — | Signal, Note to Self |
-| Chat / management UI | — | `nerve.sachiniyer.com`, mesh-only, no password |
+| Chat / management UI | — | `nerve.sachiniyer.com`, mesh-only, no password, installable as a PWA |
 | Gmail | **read + write** (send, label, archive, delete) | `gog gmail` |
 | Proton Mail | **read + write** (send, move, delete) | `himalaya -a proton`, via the Bridge sidecar |
 | Google Calendar | read | `gog calendar` (4 calendars) |
