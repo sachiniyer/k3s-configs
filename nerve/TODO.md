@@ -53,45 +53,55 @@ Not a TODO — there is no path.
 
 ---
 
-## Pending decision: drop memU (2026-09-21)
+## memU is GONE (2026-09-20) — do not bring it back
 
-**Plan: after the 23:41 consolidation on 2026-09-20 runs, review what the
-skill-based layer wrote, then disable memU and remove
-`/cluster/nerve/MEMU_ANTHROPIC_API_KEY`.**
+**It was costing real money, silently.** memU needs a raw Anthropic API key;
+it cannot use the subscription OAuth token. We fed it one through nerve config
+as `anthropic_api_key: ${MEMU_ANTHROPIC_API_KEY}`, deliberately avoiding the
+name `ANTHROPIC_API_KEY` so the SDK would not pick it up.
 
-Memory is three tiers now, and only one of them needs a credential:
+That was not enough, and the reason is worth reading before anyone tries again.
+nerve's `_build_env` in `nerve/agent/backends/claude.py` reads
+`config.effective_api_key` and injects it as `ANTHROPIC_API_KEY` into the
+**Claude Code subprocess** — which prefers it over `CLAUDE_CODE_OAUTH_TOKEN`.
+So every agent turn ran on pay-per-token billing. $15 of credits in about a
+day, no error, no log line. Checking the container's own environment showed
+nothing, because the key only ever appeared in `/proc/<pid>/environ` of the
+spawned CLI.
 
-| Tier | Needs API key | What it is |
-|---|---|---|
-| `MEMORY.md` | no | hot, in every system prompt |
-| `memory/*.md` + `memory` skill | no | the agent extracts during its own turn |
-| `skills/memory/scripts/transcripts` | no | full-text over nerve's SQLite, no LLM at all |
-| memU | **yes** | semantic index, nerve's built-in |
+**Subscription-only inference is now a hard requirement**, enforced three ways:
 
-The case against memU, so it does not get re-argued from scratch:
+| Guard | Where |
+|---|---|
+| `_build_env` drops any API key when the OAuth token is set | fork, `backends/claude.py` |
+| `MemUBridge.initialize` returns early with no key, instead of using `"placeholder"` and 401ing forever | fork, `memory/memu_bridge.py` |
+| selfcheck fails the rollout on a configured key, an env key, or a missing OAuth token | fork, `selfcheck.py` |
 
-- **It failed a trivial recall at 8 items.** Asked "which calendar is shared
-  with his girlfriend?" it returned `[]`, with that exact fact in the store.
-  That is a quality problem, not a corpus-size one.
-- **The corpus is small.** One person's life is hundreds to low thousands of
-  facts. Semantic search over a large corpus is what memU is for.
-- **It fails silently, and proved it twice** — 401d for the entire life of an
-  earlier deployment with nothing surfacing it, and then did it again: the
-  working key landed in SSM at 17:39 on 2026-09-20 but the running process had
-  already read the rejected one at start, so `memorize` returned "Invalid
-  Anthropic API Key" for four hours while `recall` looked fine. Only a pod
-  restart picked the new key up. **The env var is read once at start; rotating
-  the SSM parameter is not enough, the pod has to restart.** A memory system
-  that quietly remembers nothing is worse than none, because it gets trusted.
-- **`transcripts` covers most of it** — full-text over everything ever said,
-  which is strictly more data, with verifiable results.
-- **It is the only opaque component here.** Everything else was deliberately
-  built to be readable by hand.
+`MEMU_ANTHROPIC_API_KEY` is out of the ExternalSecret and the Deployment. The
+SSM parameter still exists — **revoke the key at console.anthropic.com**, which
+is the thing that actually stops it being usable.
 
-What would justify keeping it: adding the OpenAI key and finding that semantic
-recall reliably retrieves things grep misses — vague phrasings with no shared
-keyword. That is a second vendor to test a hypothesis the 8-item failure
-already argues against.
+### What memory is now
+
+All of it runs as ordinary agent turns on the subscription, so it costs nothing
+beyond the session:
+
+| Tier | What |
+|---|---|
+| `MEMORY.md` | hot, in every system prompt |
+| `memory/*.md` + the `memory` skill | the agent writes and greps these itself |
+| `skills/memory/scripts/transcripts` | full-text over nerve's SQLite, no LLM |
+| `memory-consolidate`, 23:41 | reads the day, writes what is durable |
+| `memory-maintenance`, 05:00 | dedupes, prunes, sharpens what is written |
+
+`memory-maintenance` is an **override** of nerve's built-in job of the same id
+in `config/cron/system.yaml`, which called memU tools that no longer exist and
+would fail every morning.
+
+The case against memU was already strong before the billing problem: it failed
+a trivial recall at 8 items, it 401d silently for the entire life of two
+deployments, and `transcripts` covers most of what it was for with verifiable
+results. The money is what settled it.
 
 ---
 
