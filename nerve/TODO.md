@@ -14,24 +14,26 @@ Start with `README.md` — it answers "I want to change X, where does that live"
 |---|---|---|
 | Chat from a phone | — | Signal, Note to Self |
 | Chat / management UI | — | `nerve.sachiniyer.com`, mesh-only, no password |
-| Gmail | read + draft | `gog gmail` |
-| Proton Mail | read + draft | `himalaya -a proton`, via the Bridge sidecar |
+| Gmail | **read + write** (send, label, archive, delete) | `gog gmail` |
+| Proton Mail | **read + write** (send, move, delete) | `himalaya -a proton`, via the Bridge sidecar |
 | Google Calendar | read | `gog calendar` (4 calendars) |
 | Proton Calendar | **read-only** | `skills/calendar/scripts/proton-calendar` |
 | iCloud Calendar | **read + write** | `skills/calendar/scripts/icloud-calendar` |
 | Contacts | read | `skills/contacts/scripts/icloud-contacts` (~258) |
 | Spending | request, human-approved | `link-cli` (Stripe wallet) |
+| Memory | 3 tiers | `MEMORY.md` → `memory/*.md` → `transcripts` (raw sessions) |
 | Scheduled work | — | nerve cron, in the workspace repo |
 
-Six skills: `mail`, `calendar`, `contacts`, `link-payments`, plus nerve's
-`nerve-workspace` and `nerve-dev`.
+Seven skills: `mail`, `calendar`, `contacts`, `link-payments`, `memory`, plus
+nerve's `nerve-workspace` and `nerve-dev`.
 
 ### What it deliberately cannot do
 
 Each of these is a decision, not a gap. Do not "fix" one without meaning to.
 
-- **Send, delete or archive mail.** Read and draft only. Sending is
-  irreversible and goes out under Sachin's name.
+- **Send mail to a third party without showing it first.** Sending itself is
+  enabled; mail leaving under Sachin's name gets recipient/subject/body shown
+  to him first. His own mailboxes need no confirmation.
 - **Edit or delete calendar events**, or edit contacts. Adding is enabled;
   changing someone else's view of a shared calendar is not.
 - **Spend without approval.** Every Link request needs a tap on his phone.
