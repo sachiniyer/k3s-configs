@@ -119,7 +119,7 @@ spec:
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:cd7a210f546357f3b26885b0838a13c3e42951d8381fc977c1fc205f90d26de5
+          image: ghcr.io/sachiniyer/nerve:phase1@sha256:55427d56e84951bb1eb9e249e5d652d08181cfd0374584912459797719ad23da
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -164,6 +164,15 @@ spec:
                 secretKeyRef:
                   name: nerve-secrets
                   key: GOG_KEYRING_PASSWORD
+            # memU's Anthropic key. NOT named ANTHROPIC_API_KEY on purpose —
+            # the Agent SDK would prefer that over the OAuth token and move
+            # the entire agent onto per-token billing. settings.yaml maps it
+            # into nerve's config as anthropic_api_key, which only memU reads.
+            - name: MEMU_ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nerve-secrets
+                  key: MEMU_ANTHROPIC_API_KEY
             # Bridge-generated IMAP password (NOT the Proton account password).
             # himalaya reads it via a password command so it is never written
             # into config.toml on the PVC.

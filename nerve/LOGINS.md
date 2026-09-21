@@ -143,6 +143,30 @@ underneath it is known-good, which is the point of having done this first.
 - **Config:** the sidecar must run `MODE=json-rpc`. In `MODE=normal` the
   websocket upgrade fails silently and inbound messages never arrive.
 
+## ✅ Anthropic API key — for memU only
+
+Done 2026-09-20. SSM `/cluster/nerve/MEMU_ANTHROPIC_API_KEY`. Verified writing
+(8 memory items) and recalling.
+
+**Must be WORKSPACE-SCOPED.** An organisation-level key authenticates but then
+fails every call with `400 — This API key is not scoped to a workspace`,
+because memU does not send the `anthropic-workspace-id` header. Create the key
+inside a workspace in the Console.
+
+**The env var name is load-bearing.** It is `MEMU_ANTHROPIC_API_KEY`, never
+`ANTHROPIC_API_KEY`: the Claude Agent SDK prefers the latter over
+`CLAUDE_CODE_OAUTH_TOKEN`, so exporting it under the obvious name silently
+moves the **entire agent** off the subscription onto per-token billing — a
+change you would discover on a bill, not in a log. nerve reads it through
+config (`anthropic_api_key: ${MEMU_ANTHROPIC_API_KEY}` in the workspace
+`settings.yaml`), so the SDK's environment stays clean.
+
+Verify the split after any change to this:
+```sh
+kubectl -n nerve exec deploy/nerve -c nerve -- sh -c \
+  '[ -n "$ANTHROPIC_API_KEY" ] && echo LEAKED || echo ok'
+```
+
 ## ✅ Apple iCloud — app-specific password
 
 Done 2026-09-20 for **sachin@sachiniyer.com**. Verified: 4 calendars listed, a
