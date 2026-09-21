@@ -6,14 +6,26 @@
 # cluster-backup-aws Secret (scoped IAM user, S3 write to the one bucket only),
 # which is NOT committed to git — copy it in from the bitwarden ns, see README.
 #
-# Three volumes, three different reasons:
-#   data/      conversation history, sessions, and config.local.yaml (which holds
-#              the generated gateway jwt_secret). Not recoverable from anywhere else.
+# Four volumes, four different reasons:
+#   data/      conversation history, sessions, memu.sqlite, and config.local.yaml
+#              (which holds the generated gateway jwt_secret). Not recoverable
+#              from anywhere else.
 #   tools/     CLI credentials and artifacts. Losing these means redoing the
 #              interactive Proton Bridge / Gmail logins.
-#   workspace/ soul, skills, crons, MEMORY.md. Mostly in git — but the agent
-#              writes MEMORY.md and new skills here and nothing pushes them back
-#              yet, so until that exists this is the only copy of what it learns.
+#   workspace/ soul, skills, crons, MEMORY.md. The workspace-push sidecar now
+#              commits the agent's own writes back to git, so this is no longer
+#              the only copy — it is the one that survives a bad push.
+#   proton/    Proton Bridge's local keychain and decrypted message cache.
+#
+# Two volumes are deliberately NOT backed up:
+#   nerve-claude  the Agent SDK's .jsonl transcripts. A cache in a vendored
+#                 CLI's own format; nerve.db already holds the readable copy of
+#                 every message. Losing it costs the in-flight conversations
+#                 their resume context, nothing more.
+#   signal-data   signal-cli's account keys and ratchet state. Restoring a
+#                 stale copy of this is worse than having none — it desyncs the
+#                 session ratchet with everyone you talk to. Recovery is
+#                 re-linking the device from the phone, which is by design.
 #
 # Scheduled at 04:47 to avoid the other backup jobs (vaultwarden 04:17,
 # headscale 04:30, ssm Sundays 05:00).
