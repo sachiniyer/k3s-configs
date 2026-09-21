@@ -51,6 +51,43 @@ Not a TODO — there is no path.
 
 ---
 
+## Pending decision: drop memU (2026-09-21)
+
+**Plan: after the 23:41 consolidation on 2026-09-20 runs, review what the
+skill-based layer wrote, then disable memU and remove
+`/cluster/nerve/MEMU_ANTHROPIC_API_KEY`.**
+
+Memory is three tiers now, and only one of them needs a credential:
+
+| Tier | Needs API key | What it is |
+|---|---|---|
+| `MEMORY.md` | no | hot, in every system prompt |
+| `memory/*.md` + `memory` skill | no | the agent extracts during its own turn |
+| `skills/memory/scripts/transcripts` | no | full-text over nerve's SQLite, no LLM at all |
+| memU | **yes** | semantic index, nerve's built-in |
+
+The case against memU, so it does not get re-argued from scratch:
+
+- **It failed a trivial recall at 8 items.** Asked "which calendar is shared
+  with his girlfriend?" it returned `[]`, with that exact fact in the store.
+  That is a quality problem, not a corpus-size one.
+- **The corpus is small.** One person's life is hundreds to low thousands of
+  facts. Semantic search over a large corpus is what memU is for.
+- **It fails silently, and proved it** — 401d for the entire life of this
+  deployment and nothing surfaced it. A memory system that quietly remembers
+  nothing is worse than none, because it gets trusted.
+- **`transcripts` covers most of it** — full-text over everything ever said,
+  which is strictly more data, with verifiable results.
+- **It is the only opaque component here.** Everything else was deliberately
+  built to be readable by hand.
+
+What would justify keeping it: adding the OpenAI key and finding that semantic
+recall reliably retrieves things grep misses — vague phrasings with no shared
+keyword. That is a second vendor to test a hypothesis the 8-item failure
+already argues against.
+
+---
+
 ## Remaining work, in rough value order
 
 ### 1. Alerting
