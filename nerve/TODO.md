@@ -119,6 +119,13 @@ makes startup depend on npm being reachable — which `Dockerfile.k8s` was
 explicitly written to avoid for everything else. Either bake it into the image
 or give `/root/.npm` a volume.
 
+### 0b. Proton Bridge self-updated again (2026-09-22)
+
+`3.27.0` is sitting in `updates/` on the proton PVC. Mail works right now, and
+the container command wipes that directory at start, so it is self-healing on
+the next restart — but it will keep happening. Pinning the Bridge version or
+disabling its updater would stop the cycle.
+
 ### 1. Alerting
 
 Nothing tells anyone if the agent dies. Today you find out by messaging it and

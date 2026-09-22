@@ -29,7 +29,7 @@ place, or the wrong thing in the right place.
 | Repo | Holds | How a change lands |
 |---|---|---|
 | **`k3s-configs/nerve/`** (here) | manifests, backup job, docs | edit → `kubectl apply` |
-| **`sachiniyer/nerve-workspace`** (private) | skills, `settings.yaml`, crons, `SOUL.md`, the agent's memory | `git push` → picked up on pod restart, or `POST /api/cron/reload` for cron alone |
+| **`sachiniyer/nerve-workspace`** (private) | skills, `settings.yaml`, crons, `SOUL.md`, the agent's memory | `git push` → then pull it in (below), no restart needed |
 | **`sachiniyer/nerve`** fork, branch `signal` | the Signal channel, `Dockerfile.k8s`, `selfcheck.py` | edit → **`./deploy.sh`** |
 
 ### Decision table
@@ -93,6 +93,38 @@ kubectl -n nerve logs -l app=nerve -c workspace-clone --tail=5
 ```
 
 ---
+
+## Getting a workspace push into the running pod
+
+No restart required, but it takes three steps and the first one has a trap.
+
+```sh
+POD=$(kubectl -n nerve get pod -l app=nerve -o jsonpath='{.items[0].metadata.name}')
+
+# 1. Pull. This MUST run in the workspace-push sidecar, not the nerve
+#    container: nerve's image has no ssh binary, so `git fetch` there fails
+#    with "cannot run ssh: No such file or directory" and the following
+#    `git merge --ff-only` then cheerfully reports "Already up to date"
+#    against a stale origin ref. Both containers mount the same PVC.
+kubectl -n nerve exec $POD -c workspace-push -- sh -c 'cd /workspace && git fetch origin && git merge --ff-only origin/main'
+
+# 2. Crons, if config/cron/ changed.
+#    POST /api/cron/reload
+
+# 3. Skills, if a SKILL.md changed. Descriptions are CACHED in the skills
+#    table, and the description is what decides whether a skill loads at all —
+#    editing the file alone changes nothing until this runs.
+#    POST /api/skills/sync
+```
+
+Both endpoints need a bearer token even though the gateway has no password;
+mint one from `auth.jwt_secret` in `$NERVE_HOME/config.local.yaml`.
+
+Confirm it landed:
+
+```sh
+kubectl -n nerve exec $POD -c nerve -- sh -c 'cd /root/nerve-workspace && git log --oneline -1'
+```
 
 ## Verifying a change actually took
 
