@@ -113,13 +113,17 @@ spec:
             - name: workspace
               mountPath: /workspace
 
+      # Its own identity rather than `default`: it may REQUEST a deploy and
+      # read the outcome (deployer.yaml, nerve-agent Role), nothing more. It
+      # cannot patch this Deployment, create Jobs, or read Secrets.
+      serviceAccountName: nerve-agent
       containers:
         - name: nerve
           # Built from sachiniyer/nerve, branch `signal`, Dockerfile.k8s.
           # Pinned by digest, not tag: a floating tag is exactly the kind of
           # quiet drift this cluster has been bitten by. Rebuild -> push ->
           # update this digest deliberately.
-          image: ghcr.io/sachiniyer/nerve:phase1@sha256:c990726bdf12294f9c033a62abd733c850be1e9f83900c8d64bcb96d3fbec3e0
+          image: ghcr.io/sachiniyer/nerve:signal@sha256:caa5d07502b533dfbbb5e535017b80637b5e3248e988c0bade15a7cd7c8db83a
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -159,6 +163,10 @@ spec:
             # is silent context loss, not an error.
             - name: CLAUDE_CONFIG_DIR
               value: /root/.claude
+            # The nerve-update skill passes this to git as core.sshCommand. Not
+            # GIT_SSH_COMMAND: that would silently apply to every git remote.
+            - name: NERVE_FORK_SSH_KEY
+              value: /root/.ssh-fork/id_ed25519
             - name: XDG_DATA_HOME
               value: /root/.config/.data
             - name: XDG_STATE_HOME
@@ -215,6 +223,11 @@ spec:
             # restart quietly resets every conversation.
             - name: claude
               mountPath: /root/.claude
+            # Push access to the fork, for the agent's weekly rebase. A file,
+            # read-only, 0400 — see externalsecret.yaml.
+            - name: fork-key
+              mountPath: /root/.ssh-fork
+              readOnly: true
             # NOTE: nerve's own config is deliberately NOT mounted here.
             #
             # `nerve init` owns and rewrites both config.yaml and
@@ -396,3 +409,10 @@ spec:
         - name: claude
           persistentVolumeClaim:
             claimName: nerve-claude
+        - name: fork-key
+          secret:
+            secretName: nerve-secrets
+            defaultMode: 0400
+            items:
+              - key: NERVE_FORK_DEPLOY_KEY
+                path: id_ed25519
