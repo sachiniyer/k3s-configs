@@ -1,0 +1,293 @@
+---
+# nerve-deployer — moves the nerve Deployment to the newest CI-built image,
+# safely, without a person in the loop.
+#
+# How an update reaches the cluster:
+#
+#   sachiniyer/nerve@signal ──(GitHub Actions: k8s-image.yml)──► ghcr.io/sachiniyer/nerve:signal
+#        ▲                     tests, then build with the newest       │
+#        │                     Claude Code CLI + Agent SDK             │
+#   the agent's weekly                                                  ▼
+#   `nerve-update` cron                                  nerve-deployer (this file)
+#   rebases onto upstream                                 03:30 nightly, or on demand
+#
+# It runs OUTSIDE the nerve pod on purpose. An agent that redeploys itself
+# cannot recover from a deploy that kills it; this job can. What it does, in
+# order, recording each outcome in the nerve-deploy-state ConfigMap:
+#
+#   1. Paused? The annotation below on the Deployment stops it cold:
+#        kubectl -n nerve annotate deploy nerve nerve.sachiniyer.com/auto-deploy=paused
+#      Remove with `...auto-deploy-`. Use it to hold a manual rollback.
+#   2. Resolve the digest `:signal` points at. Already live? Done.
+#   3. Is it the digest that failed last time? Skip it. It will not be retried
+#      until a NEW build replaces it — a broken image is not re-deployed nightly.
+#   4. Wait for the agent to be idle, polling /health/activity, for up to 45
+#      minutes. The rollout uses `strategy: Recreate`, so deploying mid-turn
+#      kills the turn — including one waiting on your answer to a question.
+#   5. Point the Deployment at the new digest and wait. selfcheck runs at
+#      container start and fails the pod if config, credentials, the CLI, or
+#      the default model are broken.
+#   6. Failed? `kubectl rollout undo`, mark the digest bad, exit non-zero.
+#
+# THE IMAGE IN deployment.yaml IS NO LONGER AUTHORITATIVE once this runs. Never
+# `kubectl apply -f deployment.yaml` directly — that would silently roll the
+# image back to whatever digest git last saw. Use ./apply-manifests.sh, which
+# applies every manifest but keeps the live image.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nerve-deployer
+  namespace: nerve
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nerve-deployer
+  namespace: nerve
+rules:
+  # Only the one Deployment, by name.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["nerve"]
+    verbs: ["get", "patch"]
+  # `rollout status` and `rollout undo` read ReplicaSets and Pods.
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Its own state, by name. Pre-created below so `create` is never needed.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["nerve-deploy-state"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nerve-deployer
+  namespace: nerve
+subjects:
+  - kind: ServiceAccount
+    name: nerve-deployer
+    namespace: nerve
+roleRef:
+  kind: Role
+  name: nerve-deployer
+  apiGroup: rbac.authorization.k8s.io
+---
+# Deliberately no `data:` here. The deployer patches keys in; kubectl apply
+# only removes keys it previously managed, so re-applying this file never
+# wipes the recorded state.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nerve-deploy-state
+  namespace: nerve
+---
+# The deploy logic, shared by both CronJobs below so it exists exactly once.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nerve-deployer-script
+  namespace: nerve
+data:
+  deploy.sh: |
+    set -uo pipefail
+    NS=nerve; DEP=nerve; CM=nerve-deploy-state
+    REPO=sachiniyer/nerve
+    # Overridable only for testing the rollback path by hand.
+    TAG="${TAG:-signal}"; ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-10m}"
+    now() { date -u +%FT%TZ; }
+    note() {
+      kubectl -n "$NS" patch configmap "$CM" --type merge \
+        -p "$(jq -n --arg k "$1" --arg v "$2" '{data:{($k):$v}}')" >/dev/null
+    }
+    finish() { echo "$1"; note last_result "$1"; note last_run "$(now)"; exit "${2:-0}"; }
+
+    # 0. Why are we here? MODE=nightly deploys whenever a newer build exists.
+    #    MODE=request runs every 15 minutes and acts ONLY on a pending request
+    #    from the agent (requested_at newer than handled_request); otherwise it
+    #    exits without touching anything, so 96 idle runs a day write nothing.
+    MODE="${MODE:-nightly}"
+    if [ "$MODE" = "request" ]; then
+      req=$(kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.requested_at}')
+      done_=$(kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.handled_request}')
+      [ -z "$req" ] || [ "$req" = "$done_" ] && exit 0
+      echo "handling deploy request from $req ($(kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.requested_by}'))"
+      note handled_request "$req"
+    fi
+
+    # 1. paused
+    paused=$(kubectl -n "$NS" get deploy "$DEP" \
+      -o jsonpath='{.metadata.annotations.nerve\.sachiniyer\.com/auto-deploy}')
+    [ "$paused" = "paused" ] && finish "skipped: auto-deploy is paused"
+
+    # 2. what :signal points at
+    tok=$(curl -fsS "https://ghcr.io/token?scope=repository:$REPO:pull" | jq -r .token) \
+      || finish "error: could not get a registry token" 1
+    want=$(curl -fsSI -H "Authorization: Bearer $tok" \
+      -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json" \
+      "https://ghcr.io/v2/$REPO/manifests/$TAG" \
+      | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}')
+    [ -n "$want" ] || finish "error: could not resolve ghcr.io/$REPO:$TAG" 1
+    live=$(kubectl -n "$NS" get deploy "$DEP" \
+      -o jsonpath='{.spec.template.spec.containers[?(@.name=="nerve")].image}')
+    [ "${live##*@}" = "$want" ] && finish "up to date: $want"
+
+    # 3. known-bad
+    bad=$(kubectl -n "$NS" get cm "$CM" -o jsonpath='{.data.last_failed_digest}')
+    [ "$bad" = "$want" ] && finish "skipped: $want failed before; waiting for a new build"
+
+    # 4. wait for idle. An unreachable endpoint means nerve is down
+    #    (nothing to interrupt) or predates /health/activity.
+    for i in $(seq 1 90); do
+      n=$(curl -fsS -m 5 "http://nerve-service.$NS.svc/health/activity" 2>/dev/null | jq -r .running 2>/dev/null)
+      [ -z "$n" ] && { echo "activity unknown — proceeding"; break; }
+      [ "$n" = "0" ] && break
+      [ "$i" = "90" ] && finish "skipped: agent busy for 45 min; will try next run"
+      echo "agent busy ($n running), waiting…"; sleep 30
+    done
+
+    # 5. deploy
+    echo "deploying $want (was ${live##*@})"
+    note last_attempt_digest "$want"
+    kubectl -n "$NS" set image "deploy/$DEP" "nerve=ghcr.io/$REPO@$want" >/dev/null
+    kubectl -n "$NS" annotate "deploy/$DEP" --overwrite \
+      "kubernetes.io/change-cause=nerve-deployer $(now): $want" >/dev/null
+    if kubectl -n "$NS" rollout status "deploy/$DEP" --timeout="$ROLLOUT_TIMEOUT"; then
+      note last_good_digest "$want"
+      finish "deployed $want"
+    fi
+
+    # 6. roll back
+    echo "rollout failed — rolling back"
+    kubectl -n "$NS" rollout undo "deploy/$DEP" >/dev/null
+    kubectl -n "$NS" rollout status "deploy/$DEP" --timeout=10m \
+      && rb="rolled back OK" || rb="ROLLBACK ALSO FAILED — nerve is down"
+    note last_failed_digest "$want"
+    finish "FAILED $want: $rb" 1
+---
+# Nightly: after the image build (02:15), before memory-maintenance (05:00),
+# inside quiet hours. Deploys whenever :signal has moved. Explicit timeZone:
+# this cluster's controller is on Eastern.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nerve-deployer
+  namespace: nerve
+spec:
+  schedule: "30 3 * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Never retry a deploy on its own. A failed rollout is rolled back and
+      # reported; trying the same image again is not a fix.
+      backoffLimit: 0
+      activeDeadlineSeconds: 4200   # 45 min idle wait + two 10 min rollouts
+      template:
+        spec:
+          serviceAccountName: nerve-deployer
+          restartPolicy: Never
+          containers:
+            - name: deployer
+              image: alpine/k8s:1.36.4
+              command: ["/bin/bash", "/script/deploy.sh"]
+              env:
+                - name: MODE
+                  value: nightly
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: nerve-deployer-script
+---
+# On request: the agent asks for a deploy by writing `requested_at` into
+# nerve-deploy-state (the ONLY write it is allowed — see nerve-agent below).
+# This picks it up within 15 minutes. Deliberately not `create jobs` for the
+# agent: that verb cannot be scoped by name, so it would let the agent run a
+# Job as nerve-deployer and patch its own Deployment, skipping the idle wait
+# and the rollback.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nerve-deployer-request
+  namespace: nerve
+spec:
+  schedule: "*/15 * * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Never retry a deploy on its own. A failed rollout is rolled back and
+      # reported; trying the same image again is not a fix.
+      backoffLimit: 0
+      activeDeadlineSeconds: 4200   # 45 min idle wait + two 10 min rollouts
+      template:
+        spec:
+          serviceAccountName: nerve-deployer
+          restartPolicy: Never
+          containers:
+            - name: deployer
+              image: alpine/k8s:1.36.4
+              command: ["/bin/bash", "/script/deploy.sh"]
+              env:
+                - name: MODE
+                  value: request
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: nerve-deployer-script
+---
+# The agent's own identity (deployment.yaml sets serviceAccountName). It can
+# REQUEST a deploy and READ what happened — nothing else. It cannot patch the
+# Deployment, create Jobs, or read Secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nerve-agent
+  namespace: nerve
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nerve-agent
+  namespace: nerve
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["nerve-deploy-state"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["nerve"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nerve-agent
+  namespace: nerve
+subjects:
+  - kind: ServiceAccount
+    name: nerve-agent
+    namespace: nerve
+roleRef:
+  kind: Role
+  name: nerve-agent
+  apiGroup: rbac.authorization.k8s.io

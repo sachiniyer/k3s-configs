@@ -52,7 +52,41 @@ changes to `main` every ~15 minutes, unreviewed. That is deliberate. It means
 
 ---
 
-## Changing the image
+## Changing the image — mostly, you don't
+
+**nerve updates itself.** Three moving parts, none of them you:
+
+| What | Who | When |
+|---|---|---|
+| Newest Claude Code CLI + Agent SDK | CI in the fork (`.github/workflows/k8s-image.yml`) | nightly 02:15, and on every push to `signal` |
+| Rebase onto upstream nerve | the agent's `nerve-update` cron | Sundays 00:30 |
+| Rolling it out | `nerve-deployer` CronJob (`deployer.yaml`) | nightly 03:30, or ≤15 min after the agent requests it |
+
+CI tests against the exact CLI/SDK it will ship, then publishes
+`ghcr.io/sachiniyer/nerve:signal`. The deployer runs **outside the nerve pod**,
+waits until no turn is running (a deploy restarts the pod), rolls out, and
+**rolls back automatically** if selfcheck fails, marking that digest bad so it
+is not retried. The agent can only *request* a deploy — it cannot patch its own
+Deployment. See the header of `deployer.yaml` for the full sequence.
+
+```sh
+kubectl -n nerve get cm nerve-deploy-state -o yaml        # what the deployer last did
+kubectl -n nerve create job --from=cronjob/nerve-deployer deploy-now   # deploy now
+kubectl -n nerve annotate deploy nerve nerve.sachiniyer.com/auto-deploy=paused   # hold
+kubectl -n nerve annotate deploy nerve nerve.sachiniyer.com/auto-deploy-         # release
+```
+
+**Pause before any manual rollback**, or the next 03:30 run moves you forward
+again.
+
+### ⚠ Never `kubectl apply -f deployment.yaml`
+
+The deployer moves the live image without committing it, so the digest in git
+is usually stale. Applying the file directly would **silently roll nerve back**
+to it. Use `./apply-manifests.sh`, which applies every manifest but keeps the
+image that is running.
+
+### By hand, when you need to
 
 ```sh
 git clone --branch signal git@github.com:sachiniyer/nerve.git /tmp/nervefork
@@ -60,17 +94,12 @@ git clone --branch signal git@github.com:sachiniyer/nerve.git /tmp/nervefork
 ./deploy.sh /tmp/nervefork
 ```
 
-`deploy.sh` builds, pushes, reads the digest **back from the registry**, updates
-`deployment.yaml`, applies, and waits on the rollout. Do not do this by hand:
-forgetting the digest edit leaves the cluster running the **old image while
-every sign says the deploy worked**, which is the worst failure shape here.
+`deploy.sh` builds with the newest CLI/SDK (same policy as CI), publishes to
+the same `:signal` tag, compares against the **live** digest, applies and waits.
+Use it when CI is down or to watch something land right now.
 
-Commit the digest change afterwards — the script reminds you.
-
-**Rebasing the fork onto upstream:** see `REBASE.md` in the fork. Short version:
-only `nerve/config.py` and `nerve/gateway/server.py` are patched (58 additive
-lines), every insertion sits beside its Telegram equivalent, and the other
-three files are new so they cannot conflict.
+**Rebasing:** `REBASE.md` in the fork. The agent does this weekly; read it
+before resolving a conflict yourself.
 
 ## Changing config or a skill
 

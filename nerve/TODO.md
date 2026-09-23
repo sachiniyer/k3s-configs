@@ -42,7 +42,11 @@ imaginable; add one only because he asked for it.
   to him first. His own mailboxes need no confirmation.
 - **Spend without approval.** Every Link request needs a tap on his phone.
   `--approve` exists on the CLI and is forbidden in the skill.
-- **Touch the cluster.** No kubectl, no ServiceAccount.
+- **Deploy itself.** Its ServiceAccount (`nerve-agent`) may *request* a
+  deploy by writing one named ConfigMap, and read the Deployment. It cannot
+  patch the Deployment, create Jobs, or read Secrets. Deliberately not
+  `create jobs`: that verb cannot be scoped by name, so it would let the agent
+  run a Job as `nerve-deployer` and skip the idle wait and the rollback.
 
 ### What is impossible on this account
 
@@ -193,6 +197,10 @@ health checks green, and the system quietly broken.**
 | Signal routes on DESTINATION, not sender | A linked device syncs every message Sachin sends to anyone as `syncMessage.sentMessage` with `source` = his OWN number, so an allowlist checking `source` passes all of them and the agent answers his texts to other people as if they were prompts. Only `destination == own number` is Note to Self. Unrecognised shapes classify as ignore — guessing "this is for me" is what caused the bug |
 | `signal.outbound_allowed_numbers` empty | The agent may READ other threads and may write to none of them. Enforced in `send`/`send_file`/`set_reaction`/`send_typing`, not by instruction. Adding a number is the approval step |
 | Backup SNAPSHOTS SQLite and STAGES Proton | `nerve.db` is WAL-mode; on 2026-09-22 the db and its wal were copied 13 minutes apart, which restores torn. `aws s3 sync` exits 2 on gpg-agent's sockets even when they are `--exclude`d, which failed every run from 2026-09-21 — after uploading everything, so the data was there and the job was red. And Bridge's multi-GB `gluon/` cache made each run ~20 minutes for data it re-syncs anyway. Restore-tested |
+| Rollouts happen OUTSIDE the nerve pod (`nerve-deployer`) | A deploy restarts the agent; one that breaks it leaves nothing running to fix it. The deployer waits for `/health/activity` to read 0, rolls back on a failed selfcheck, and refuses to retry a digest that failed |
+| `apply-manifests.sh`, never `kubectl apply -f deployment.yaml` | The deployer moves the live image without committing; the digest in git is stale by design. A raw apply silently rolls nerve back |
+| CLI + SDK installed over the lockfile, in the Dockerfile | Tracks their newest releases without touching `uv.lock`, so rebases never conflict on it. selfcheck verifies both and runs the default model through the real CLI |
+| Fork default branch is `signal` | GitHub only runs scheduled workflows from the default branch; on `main` the nightly CLI/SDK build never fired |
 | `selfcheck.py` runs before `nerve start` | Reads config back out of the loader and makes one real model call. It has already caught a missing `link-cli` |
 | `nerve-claude` PVC at `/root/.claude` + `CLAUDE_CONFIG_DIR` | The Agent SDK's conversation `.jsonl` transcripts live here and are what a resume reads. nerve keeps the session *mapping* in `nerve-data`, so without this volume the mapping survives a restart and the transcript does not — **every conversation silently reset on every deploy**, the agent answering with the topic but no history. `CLAUDE_CONFIG_DIR` must stay `/root/.claude`: `validate_resume_target` hardcodes `~/.claude/projects` |
 | iCloud: `save_event`/`search` only | `event_by_uid` and todo queries return 412/500 on iCloud. `search` needs `expand=True` or recurring events report their creation date |

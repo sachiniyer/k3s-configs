@@ -9,12 +9,18 @@
 #
 #   ./deploy.sh [path-to-fork]     default: /tmp/nervefork
 #
-# Pins by digest, never by tag: a floating tag is exactly the kind of silent
-# drift this cluster has been bitten by before.
+# The MANUAL path. Normally nothing needs it: pushing to the fork's `signal`
+# branch makes CI build and publish, and nerve-deployer rolls it out at 03:30
+# (or within 15 minutes of the agent requesting it). Use this when CI is down,
+# or to ship something right now and watch it land.
+#
+# It publishes to the same `:signal` tag CI does, with the same newest
+# CLI/SDK versions, so the deployer sees a hand-built image as current rather
+# than "rolling back" to CI's. Pins by digest, never by tag.
 set -euo pipefail
 
 FORK="${1:-/tmp/nervefork}"
-IMAGE="ghcr.io/sachiniyer/nerve:phase1"
+IMAGE="ghcr.io/sachiniyer/nerve:signal"
 NS="nerve"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -36,7 +42,13 @@ fi
 echo "==> building"
 # -f is resolved against the CWD, not the build context, so it must be
 # an absolute path into the fork — this script runs from k3s-configs/nerve.
-docker build -f "$FORK/Dockerfile.k8s" -t "$IMAGE" "$FORK"
+# Same version policy as CI (k8s-image.yml): newest CLI and SDK unless pinned
+# in the environment.
+CLI="${CLAUDE_CODE_VERSION:-$(npm view @anthropic-ai/claude-code version)}"
+SDK="${CLAUDE_AGENT_SDK_VERSION:-$(curl -fsS https://pypi.org/pypi/claude-agent-sdk/json | jq -r .info.version)}"
+echo "==> Claude Code CLI $CLI, Agent SDK $SDK"
+docker build -f "$FORK/Dockerfile.k8s" -t "$IMAGE" \
+  --build-arg "CLAUDE_CODE_VERSION=$CLI" --build-arg "CLAUDE_AGENT_SDK_VERSION=$SDK" "$FORK"
 
 echo "==> pushing"
 gh auth token | docker login ghcr.io -u sachiniyer --password-stdin >/dev/null
@@ -48,14 +60,21 @@ DIGEST="$(grep -oE 'sha256:[a-f0-9]{64}' /tmp/nerve-push.log | tail -1)"
 [ -n "$DIGEST" ] || { echo "error: could not determine pushed digest" >&2; exit 1; }
 echo "==> digest: $DIGEST"
 
-OLD="$(grep -oE 'nerve:phase1@sha256:[a-f0-9]{64}' "$HERE/deployment.yaml" | head -1 | cut -d@ -f2)"
+# Compare against what is RUNNING, not git: nerve-deployer moves the live
+# image without committing, so the digest in deployment.yaml is often stale.
+LIVE="$(kubectl -n "$NS" get deploy nerve \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="nerve")].image}')"
+OLD="${LIVE##*@}"
 if [ "$OLD" = "$DIGEST" ]; then
-  echo "==> digest unchanged; nothing to roll out"
+  echo "==> already running $DIGEST; nothing to roll out"
   exit 0
 fi
 
 echo "==> updating deployment.yaml ($OLD -> $DIGEST)"
-sed -i "s|${OLD}|${DIGEST}|" "$HERE/deployment.yaml"
+sed -E -i "s#^([[:space:]]+image: )ghcr\.io/sachiniyer/nerve[^[:space:]]*#\1ghcr.io/sachiniyer/nerve:signal@${DIGEST}#" \
+  "$HERE/deployment.yaml"
+grep -q "nerve:signal@${DIGEST}" "$HERE/deployment.yaml" \
+  || { echo "error: failed to write the new digest into deployment.yaml" >&2; exit 1; }
 
 echo "==> applying"
 kubectl -n "$NS" apply -f "$HERE/deployment.yaml"
@@ -69,9 +88,10 @@ if ! kubectl -n "$NS" rollout status deploy/nerve --timeout=6m; then
   echo "ROLLOUT FAILED. Check the self-check output first:"
   echo "  kubectl -n $NS logs -l app=nerve -c nerve --tail=40 | grep -A10 -i selfcheck"
   echo ""
-  echo "To roll back, restore the previous digest and re-apply:"
-  echo "  sed -i 's|${DIGEST}|${OLD}|' $HERE/deployment.yaml"
-  echo "  kubectl -n $NS apply -f $HERE/deployment.yaml"
+  echo "To roll back:"
+  echo "  kubectl -n $NS rollout undo deploy/nerve"
+  echo "and pause the deployer so it does not immediately retry :signal:"
+  echo "  kubectl -n $NS annotate deploy nerve nerve.sachiniyer.com/auto-deploy=paused"
   exit 1
 fi
 
