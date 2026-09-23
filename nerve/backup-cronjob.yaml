@@ -15,7 +15,30 @@
 #   workspace/ soul, skills, crons, MEMORY.md. The workspace-push sidecar now
 #              commits the agent's own writes back to git, so this is no longer
 #              the only copy — it is the one that survives a bad push.
-#   proton/    Proton Bridge's local keychain and decrypted message cache.
+#   proton/    Proton Bridge's login: vault.enc, imap-sync, and the pass/GPG
+#              keychain. ~70 KB. NOT the message cache — see below.
+#
+# Three things this job gets right on purpose. Each was a real failure:
+#
+#   * SQLite is SNAPSHOTTED, not copied. nerve.db runs in WAL mode, and on
+#     2026-09-23 the main file had not been written in two days — everything
+#     since lived in the -wal. `aws s3 sync` copies the db and its wal at
+#     different moments, which restores as either stale or corrupt. The
+#     `snapshot` initContainer uses SQLite's online backup API instead:
+#     a consistent point-in-time copy, integrity-checked, WAL folded in.
+#
+#   * aws never sees a socket. `aws s3 sync` EXITS 2 when it skips a file it
+#     cannot copy, and gpg-agent keeps Unix sockets in .gnupg/ while it runs.
+#     Under `set -e` that failed every run from 2026-09-21 onward — after
+#     uploading everything else, so the data was there but the job was red.
+#     `--exclude` does NOT help: aws warns about special files while walking
+#     the tree, before it applies filters. So the initContainer stages
+#     Proton's REGULAR files into /snap/proton and aws uploads only that.
+#
+#   * Bridge's message cache (gluon/) is excluded. It is several GB, Bridge
+#     re-syncs it from Proton's servers after a restore, and uploading it to a
+#     fresh dated prefix every night made each run take ~20 minutes for data
+#     nobody would restore.
 #
 # Two volumes are deliberately NOT backed up:
 #   nerve-claude  the Agent SDK's .jsonl transcripts. A cache in a vendored
@@ -60,6 +83,62 @@ spec:
                     matchLabels:
                       app: nerve
                   topologyKey: kubernetes.io/hostname
+          initContainers:
+            - name: snapshot
+              image: python:3.13-slim
+              command: ["python3", "-c"]
+              args:
+                - |
+                  import glob, os, shutil, sqlite3, stat, sys
+
+                  # 1. SQLite: consistent point-in-time copies, WAL folded in.
+                  os.makedirs("/snap/data", exist_ok=True)
+                  bad = 0
+                  for path in sorted(glob.glob("/data/*.db") + glob.glob("/data/*.sqlite")):
+                      name = os.path.basename(path)
+                      dst = os.path.join("/snap/data", name)
+                      src = sqlite3.connect(path, timeout=60)
+                      out = sqlite3.connect(dst)
+                      src.backup(out)
+                      out.execute("pragma journal_mode=delete")
+                      ok = out.execute("pragma integrity_check").fetchone()[0]
+                      out.close(); src.close()
+                      print(f"snapshot {name}: {os.path.getsize(dst)} bytes, integrity={ok}")
+                      bad += ok != "ok"
+
+                  # 2. Proton: regular files only, minus what is not worth
+                  #    restoring. Sockets are skipped HERE because aws cannot
+                  #    be told to ignore them (see the header).
+                  # Prefix match on "updates": the PVC also holds
+                  # updates-3.26.0.broken, a crashing self-update set aside
+                  # during an earlier incident — ~1,500 Qt files, and the one
+                  # thing that must never be restored.
+                  SKIP_DIRS = {"gluon", "logs", "lost+found"}
+                  staged = 0
+                  for root, dirs, files in os.walk("/proton"):
+                      dirs[:] = [d for d in dirs
+                                 if d not in SKIP_DIRS and not d.startswith("updates")]
+                      for f in files:
+                          p = os.path.join(root, f)
+                          if not stat.S_ISREG(os.lstat(p).st_mode):
+                              continue
+                          dst = os.path.join("/snap/proton", os.path.relpath(p, "/proton"))
+                          os.makedirs(os.path.dirname(dst), exist_ok=True)
+                          shutil.copy2(p, dst)
+                          staged += 1
+                  print(f"staged {staged} proton files")
+                  if not os.path.exists("/snap/proton/.config/protonmail/bridge-v3/vault.enc"):
+                      print("ERROR: no Bridge vault staged — the login would not survive a restore")
+                      bad += 1
+                  sys.exit(1 if bad else 0)
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: proton
+                  mountPath: /proton
+                  readOnly: true
+                - name: snap
+                  mountPath: /snap
           containers:
             - name: backup
               image: amazon/aws-cli:2.15.30
@@ -72,17 +151,20 @@ spec:
                   set -euo pipefail
                   ts=$(date +%F)
                   base="s3://sachiniyer-cluster-backups/nerve/${ts}"
+                  # Live databases are excluded here and uploaded from /snap,
+                  # where the initContainer left consistent copies.
                   aws s3 sync /data "${base}/data/" --sse AES256 \
-                    --exclude "lost+found/*" --exclude "cache/*" --exclude "logs/*"
+                    --exclude "lost+found/*" --exclude "cache/*" --exclude "logs/*" \
+                    --exclude "*.db" --exclude "*.db-wal" --exclude "*.db-shm" \
+                    --exclude "*.sqlite" --exclude "*.sqlite-wal" --exclude "*.sqlite-shm"
+                  aws s3 sync /snap/data "${base}/data/" --sse AES256
                   aws s3 sync /tools "${base}/tools/" --sse AES256 \
                     --exclude "lost+found/*" --exclude ".cache/*"
                   aws s3 sync /workspace "${base}/workspace/" --sse AES256 \
                     --exclude "lost+found/*" --exclude ".git/*"
-                  # Proton Bridge: vault, account DB and the GPG/pass store.
-                  # Excludes logs and the self-update dir, neither of which is
-                  # worth restoring.
-                  aws s3 sync /proton "${base}/proton/" --sse AES256 \
-                    --exclude "lost+found/*" --exclude "*/logs/*" --exclude "*/updates/*"
+                  # Proton Bridge: the login only (vault, imap-sync, pass/GPG),
+                  # staged by the initContainer — never /proton directly.
+                  aws s3 sync /snap/proton "${base}/proton/" --sse AES256
                   echo "nerve backup complete: ${ts}"
               envFrom:
                 - secretRef:
@@ -100,14 +182,18 @@ spec:
                 - name: workspace
                   mountPath: /workspace
                   readOnly: true
-                - name: proton
-                  mountPath: /proton
+                - name: snap
+                  mountPath: /snap
                   readOnly: true
           volumes:
             - name: data
               persistentVolumeClaim:
                 claimName: nerve-data
-                readOnly: true
+                # NOT readOnly at the volume: reading a WAL-mode SQLite db
+                # needs write access to its -shm. Only the snapshot
+                # initContainer mounts it writable; the upload mounts it ro.
+            - name: snap
+              emptyDir: {}
             - name: tools
               persistentVolumeClaim:
                 claimName: nerve-tools
